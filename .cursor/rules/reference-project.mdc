@@ -1,0 +1,17 @@
+---
+description: Эталонный проект money-magnet-analytics для переиспользования паттернов
+alwaysApply: true
+---
+
+# Reference project
+
+Эталон: папка `money-magnet-analytics` в workspace (pishalking.ru).
+
+Перед реализацией похожей фичи смотри там:
+- auth: `src/hooks/useAuth.ts`
+- Supabase client: `src/integrations/supabase/client.ts`
+- edge shared: `supabase/functions/_shared/gemini.ts`
+- UI: `src/components/ui/`
+
+Копируй паттерны, не копируй бизнес-логику audit/offer/competitors без явной просьбы.
+Не используй env, project_id и миграции из reference-проекта — у GrowControl свой Supabase.

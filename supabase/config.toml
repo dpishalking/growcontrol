@@ -1,0 +1,12 @@
+project_id = "elxfrbcpldzfipunkfvq"
+
+# Auth: Site URL = https://controlgrow.ru
+# Redirect URLs: production + local dev
+[auth]
+site_url = "https://controlgrow.ru"
+additional_redirect_urls = [
+  "https://controlgrow.ru/**",
+  "https://www.controlgrow.ru/**",
+  "http://localhost:8081/**",
+  "http://127.0.0.1:8081/**",
+]

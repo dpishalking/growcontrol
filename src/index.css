@@ -1,0 +1,247 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 220 25% 6%;
+    --foreground: 40 30% 96%;
+
+    --card: 220 24% 9%;
+    --card-foreground: 40 30% 96%;
+
+    --popover: 220 24% 9%;
+    --popover-foreground: 40 30% 96%;
+
+    --primary: 45 95% 58%;
+    --primary-foreground: 220 30% 8%;
+
+    --secondary: 220 20% 14%;
+    --secondary-foreground: 40 30% 96%;
+
+    --muted: 220 20% 14%;
+    --muted-foreground: 40 10% 65%;
+
+    --accent: 12 90% 60%;
+    --accent-foreground: 40 30% 96%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 40 30% 98%;
+
+    --border: 220 20% 16%;
+    --input: 220 20% 16%;
+    --ring: 45 95% 58%;
+
+    --money: 142 70% 50%;
+    --warning: 12 90% 60%;
+
+    --gradient-money: linear-gradient(135deg, hsl(45 95% 58%), hsl(12 90% 60%));
+    --gradient-bg: radial-gradient(ellipse at top, hsl(220 30% 12%) 0%, hsl(220 25% 6%) 60%);
+    --shadow-glow: 0 20px 60px -20px hsl(45 95% 58% / 0.4);
+    --shadow-card: 0 10px 40px -10px hsl(0 0% 0% / 0.5);
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    overflow-x: clip;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    background-image: var(--gradient-bg);
+    background-attachment: fixed;
+    font-feature-settings: "ss01", "cv11";
+  }
+}
+
+@layer utilities {
+  .scan-line {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    border-radius: inherit;
+  }
+  .scan-line::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 80px;
+    background: linear-gradient(
+      180deg,
+      transparent 0%,
+      hsl(var(--primary) / 0.18) 50%,
+      transparent 100%
+    );
+    animation: scan 2.6s ease-in-out infinite;
+  }
+  @keyframes scan {
+    0% { top: -80px; }
+    100% { top: 100%; }
+  }
+
+  .grid-noise {
+    background-image:
+      linear-gradient(hsl(var(--primary) / 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--primary) / 0.05) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  .btn-press {
+    transition: transform 0.12s ease, box-shadow 0.25s ease, filter 0.25s ease;
+  }
+  .btn-press:active {
+    transform: scale(0.97);
+  }
+
+  @keyframes ripple {
+    0% { transform: scale(0); opacity: 0.5; }
+    100% { transform: scale(4); opacity: 0; }
+  }
+  .ripple {
+    position: absolute;
+    border-radius: 9999px;
+    background: hsl(var(--primary-foreground) / 0.5);
+    transform: scale(0);
+    animation: ripple 0.6s ease-out;
+    pointer-events: none;
+  }
+
+  /* Animated conic-gradient border for the URL form */
+  @property --angle {
+    syntax: "<angle>";
+    initial-value: 0deg;
+    inherits: false;
+  }
+  @keyframes spin-border {
+    to { --angle: 360deg; }
+  }
+  .animated-border {
+    position: relative;
+    border-radius: 1rem;
+    padding: 2px;
+    background:
+      conic-gradient(
+        from var(--angle, 0deg),
+        hsl(var(--primary)) 0%,
+        hsl(var(--accent)) 25%,
+        hsl(var(--money)) 50%,
+        hsl(var(--accent)) 75%,
+        hsl(var(--primary)) 100%
+      );
+    animation: spin-border 4s linear infinite;
+  }
+  .animated-border::before {
+    content: "";
+    position: absolute;
+    inset: -8px;
+    border-radius: 1.25rem;
+    background: inherit;
+    filter: blur(18px);
+    opacity: 0.45;
+    z-index: -1;
+    pointer-events: none;
+  }
+  @keyframes pulse-hint {
+    0%, 100% { opacity: 0.6; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.06); }
+  }
+  .pulse-hint { animation: pulse-hint 2s ease-in-out infinite; }
+
+  @keyframes draw-arrow {
+    to { stroke-dashoffset: 0; }
+  }
+}
+
+@layer utilities {
+  /** Слой для html2canvas: в DOM только на время экспорта, вне потока страницы. */
+  .pdf-export-sink {
+    position: fixed !important;
+    left: -10000px !important;
+    top: 0 !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    z-index: -1 !important;
+  }
+
+  .pdf-export [data-pdf-hide] { display: none !important; }
+  .pdf-export [data-radix-accordion-content][hidden],
+  .pdf-export [data-radix-collapsible-content][hidden] {
+    display: block !important;
+  }
+  .pdf-export [data-radix-accordion-content],
+  .pdf-export [data-radix-collapsible-content] {
+    animation: none !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+}
