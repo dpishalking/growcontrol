@@ -10,3 +10,6 @@ additional_redirect_urls = [
   "http://localhost:8081/**",
   "http://127.0.0.1:8081/**",
 ]
+
+[functions.analyze-funnel-audit]
+verify_jwt = false

@@ -1,0 +1,311 @@
+import { useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { HelpCircle, Layers, Plus, Sparkles, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useAppData } from "@/context/AppDataContext";
+import { WizardLayout } from "@/features/wizard/WizardLayout";
+import {
+  FUNNEL_TYPE_CATALOG,
+  getFunnelTypeTemplate,
+  suggestFunnelTypeFromQuiz,
+} from "@/data/funnelTypes/catalog";
+import type { Funnel } from "@/types/funnel";
+import type { FunnelStageDefinition, FunnelTypeId } from "@/types/funnelType";
+import { cn } from "@/lib/utils";
+
+const QUIZ_Q1 = [
+  { value: "lead", label: "Оставить заявку" },
+  { value: "register", label: "Зарегистрироваться" },
+  { value: "quiz", label: "Пройти квиз" },
+  { value: "bot", label: "Подписаться в бот" },
+  { value: "buy", label: "Купить сразу" },
+  { value: "visit", label: "Записаться на визит" },
+];
+
+const QUIZ_Q2 = [
+  { value: "site", label: "На сайте" },
+  { value: "call", label: "На звонке" },
+  { value: "webinar", label: "На вебинаре" },
+  { value: "messenger", label: "В мессенджере" },
+  { value: "offline", label: "В офлайн-точке" },
+  { value: "delivery", label: "После доставки" },
+];
+
+const QUIZ_Q3 = [
+  { value: "payment", label: "Оплата" },
+  { value: "buyout", label: "Выкуп" },
+  { value: "subscription", label: "Подписка" },
+  { value: "visit", label: "Визит" },
+  { value: "contract", label: "Договор" },
+  { value: "renewal", label: "Повторное продление" },
+];
+
+export function FunnelTypeStep({ funnel }: { funnel: Funnel }) {
+  const { projectId } = useParams<{ projectId: string }>();
+  const nav = useNavigate();
+  const { applyFunnelTypeAction, setFunnelStep } = useAppData();
+
+  const [selected, setSelected] = useState<FunnelTypeId | null>(funnel.funnelTypeId);
+  const [showQuiz, setShowQuiz] = useState(false);
+  const [quiz, setQuiz] = useState({ firstAction: "", salePoint: "", moneyEvent: "" });
+  const [customStages, setCustomStages] = useState<FunnelStageDefinition[]>(
+    funnel.funnelTypeId === "custom" && funnel.stages.length
+      ? funnel.stages
+      : getFunnelTypeTemplate("custom").requiredStages,
+  );
+
+  const suggested = useMemo(() => {
+    if (!quiz.firstAction || !quiz.salePoint || !quiz.moneyEvent) return null;
+    return suggestFunnelTypeFromQuiz(quiz);
+  }, [quiz]);
+
+  const handleApplySuggestion = () => {
+    if (!suggested) return;
+    setSelected(suggested);
+    setShowQuiz(false);
+    toast.success("Подобрали тип воронки — проверьте и подтвердите");
+  };
+
+  const handleNext = () => {
+    if (!selected) {
+      toast.error("Выберите тип воронки");
+      return;
+    }
+    if (selected === "custom" && customStages.filter((s) => s.label.trim()).length < 3) {
+      toast.error("Добавьте минимум 3 этапа для кастомной воронки");
+      return;
+    }
+
+    const stages =
+      selected === "custom"
+        ? customStages
+            .filter((s) => s.label.trim())
+            .map((s, i) => ({
+              id: s.id || `stage_${i + 1}`,
+              label: s.label.trim(),
+            }))
+        : undefined;
+
+    applyFunnelTypeAction(funnel.id, selected, stages);
+    setFunnelStep(funnel.id, 3);
+    nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/materials`);
+  };
+
+  const updateCustomStage = (index: number, label: string) => {
+    setCustomStages((prev) =>
+      prev.map((s, i) => (i === index ? { ...s, label } : s)),
+    );
+  };
+
+  const addCustomStage = () => {
+    setCustomStages((prev) => [
+      ...prev,
+      { id: `custom_${prev.length + 1}`, label: "" },
+    ]);
+  };
+
+  const removeCustomStage = (index: number) => {
+    if (customStages.length <= 3) {
+      toast.error("Минимум 3 этапа");
+      return;
+    }
+    setCustomStages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  return (
+    <WizardLayout
+      funnel={funnel}
+      activeStep="funnel-type"
+      onBack={() => nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/focus`)}
+      onNext={handleNext}
+      nextLabel="К материалам"
+      nextDisabled={!selected}
+    >
+      <div className="space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            Тип воронки определяет этапы, обязательные метрики, материалы для аудита и направления
+            гипотез. Выберите шаблон — система подставит структуру автоматически.
+          </p>
+          <Button variant="outline" size="sm" onClick={() => setShowQuiz((v) => !v)}>
+            <HelpCircle className="mr-1 h-4 w-4" />
+            Не знаю, какой тип
+          </Button>
+        </div>
+
+        {showQuiz ? (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                Помощник выбора типа
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <QuizField
+                label="1. Что является первым целевым действием?"
+                value={quiz.firstAction}
+                options={QUIZ_Q1}
+                onChange={(v) => setQuiz((q) => ({ ...q, firstAction: v }))}
+              />
+              <QuizField
+                label="2. Где происходит основная продажа?"
+                value={quiz.salePoint}
+                options={QUIZ_Q2}
+                onChange={(v) => setQuiz((q) => ({ ...q, salePoint: v }))}
+              />
+              <QuizField
+                label="3. Что является главным денежным событием?"
+                value={quiz.moneyEvent}
+                options={QUIZ_Q3}
+                onChange={(v) => setQuiz((q) => ({ ...q, moneyEvent: v }))}
+              />
+              {suggested ? (
+                <div className="flex flex-wrap items-center gap-2 pt-2">
+                  <span className="text-sm">Рекомендуем:</span>
+                  <Badge variant="secondary">{getFunnelTypeTemplate(suggested).name}</Badge>
+                  <Button size="sm" onClick={handleApplySuggestion}>
+                    Выбрать
+                  </Button>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : null}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          {FUNNEL_TYPE_CATALOG.map((type) => {
+            const active = selected === type.id;
+            return (
+              <button
+                key={type.id}
+                type="button"
+                onClick={() => setSelected(type.id)}
+                className={cn(
+                  "text-left rounded-xl border p-4 transition-colors",
+                  active
+                    ? "border-primary bg-primary/10 ring-1 ring-primary/30"
+                    : "border-border/60 hover:border-primary/40 hover:bg-muted/30",
+                )}
+              >
+                <div className="flex items-start gap-2">
+                  <Layers className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{type.name}</p>
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{type.description}</p>
+                    <p className="text-[11px] text-muted-foreground mt-2">
+                      <span className="text-foreground/70">Пример:</span> {type.exampleFlow}
+                    </p>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      <Badge variant="outline" className="text-[10px]">
+                        {type.requiredStages.length} этапов
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px]">
+                        {type.requiredMetrics.length} метрик
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {selected === "custom" ? (
+          <Card className="border-border/60">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Этапы кастомной воронки</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <p className="text-xs text-muted-foreground mb-3">
+                Обязательно: источник трафика, точка входа, целевое действие, точка продажи, финансовый
+                результат. Можно добавить свои этапы и переименовать.
+              </p>
+              {customStages.map((stage, index) => (
+                <div key={stage.id + index} className="flex gap-2">
+                  <Input
+                    value={stage.label}
+                    onChange={(e) => updateCustomStage(index, e.target.value)}
+                    placeholder={`Этап ${index + 1}`}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeCustomStage(index)}
+                    aria-label="Удалить этап"
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              ))}
+              <Button type="button" variant="outline" size="sm" onClick={addCustomStage}>
+                <Plus className="mr-1 h-4 w-4" />
+                Добавить этап
+              </Button>
+            </CardContent>
+          </Card>
+        ) : selected ? (
+          <Card className="border-border/60">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Этапы шаблона</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ol className="flex flex-wrap gap-2">
+                {getFunnelTypeTemplate(selected).requiredStages.map((s, i) => (
+                  <li key={s.id}>
+                    <Badge variant="secondary" className="text-xs font-normal">
+                      {i + 1}. {s.label}
+                    </Badge>
+                  </li>
+                ))}
+              </ol>
+            </CardContent>
+          </Card>
+        ) : null}
+      </div>
+    </WizardLayout>
+  );
+}
+
+function QuizField({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger>
+          <SelectValue placeholder="Выберите ответ" />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}

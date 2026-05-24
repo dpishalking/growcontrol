@@ -108,6 +108,24 @@ export type Database = {
         };
         Relationships: [];
       };
+      admin_users: {
+        Row: {
+          user_id: string;
+          email: string;
+          created_at: string;
+        };
+        Insert: {
+          user_id: string;
+          email: string;
+          created_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          email?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       project_events: {
         Row: {
           id: string;

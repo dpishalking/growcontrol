@@ -11,8 +11,16 @@ const dist = join(root, "dist");
 const indexPath = join(dist, "index.html");
 const indexHtml = readFileSync(indexPath, "utf8");
 
-/** Add routes here as the app grows. */
-const STATIC_ROUTES = ["auth"];
+/** Paths without dynamic segments (must match App.tsx static routes). */
+const STATIC_ROUTES = [
+  "auth",
+  "dashboard",
+  "billing",
+  "admin",
+  "admin/users",
+  "admin/projects",
+  "admin/hypotheses",
+];
 
 for (const route of STATIC_ROUTES) {
   const dir = join(dist, route);
