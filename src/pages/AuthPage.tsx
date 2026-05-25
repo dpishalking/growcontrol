@@ -4,7 +4,6 @@ import { toast } from "sonner";
 import {
   ArrowRight,
   FlaskConical,
-  Layers3,
   LineChart,
   Loader2,
   Mail,
@@ -128,14 +127,6 @@ export default function AuthPage() {
         className="auth-orb auth-orb-delay absolute -bottom-48 right-[10%] h-[520px] w-[520px] rounded-full blur-3xl pointer-events-none"
         style={{ background: "radial-gradient(circle, hsl(var(--accent) / 0.16), transparent 70%)" }}
       />
-      <div
-        className="pointer-events-none absolute left-[38%] top-[18%] hidden h-72 w-72 rounded-full blur-3xl lg:block"
-        style={{
-          background: "radial-gradient(circle, hsl(var(--primary) / 0.12), transparent 70%)",
-          animation: "auth-glow-pulse 5s ease-in-out infinite",
-        }}
-      />
-
       <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col justify-center px-5 py-8 sm:px-8 lg:px-10">
         <div className="auth-hero-rise mb-8 lg:mb-10">
           <AppBrand iconClassName="h-9 w-9 rounded-xl" />
@@ -143,34 +134,6 @@ export default function AuthPage() {
 
         <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(300px,380px)] lg:gap-14 xl:gap-16">
           <section className="relative space-y-7 lg:space-y-8">
-            {/* Decorative orbit — depth behind copy */}
-            <div
-              className="pointer-events-none absolute -right-6 top-8 hidden h-56 w-56 opacity-60 lg:block xl:-right-10 xl:h-64 xl:w-64"
-              aria-hidden
-            >
-              <div className="auth-orbit-ring absolute inset-0 rounded-full border border-primary/20" />
-              <div className="auth-orbit-ring-reverse absolute inset-4 rounded-full border border-dashed border-primary/15" />
-              <div className="absolute inset-[38%] rounded-full bg-primary/25 blur-md" />
-              <div className="auth-funnel-stack absolute inset-0 flex items-center justify-center">
-                <div className="relative h-28 w-36">
-                  {[
-                    { label: "Воронка", y: 0, opacity: 0.55 },
-                    { label: "Метрики", y: 14, opacity: 0.75 },
-                    { label: "Гипотезы", y: 28, opacity: 1 },
-                  ].map((layer) => (
-                    <div
-                      key={layer.label}
-                      className="auth-funnel-layer absolute inset-x-0 flex items-center gap-2 rounded-xl border border-border/50 bg-card/80 px-3 py-2 text-[10px] font-medium backdrop-blur-sm"
-                      style={{ top: layer.y, opacity: layer.opacity, zIndex: layer.y }}
-                    >
-                      <Layers3 className="h-3.5 w-3.5 text-primary shrink-0" />
-                      {layer.label}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
             <h1 className="auth-hero-rise auth-hero-rise-delay-1 relative font-display text-[1.75rem] font-bold leading-[1.12] tracking-tight sm:text-4xl lg:text-[2.75rem] xl:text-5xl">
               Управляйте ростом через{" "}
               <span className="bg-gradient-money bg-clip-text text-transparent">

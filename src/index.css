@@ -378,29 +378,13 @@
   .fade-in { animation: fade-in 0.3s ease-out; }
 
   @keyframes auth-orb-drift {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    33% { transform: translate(12px, -18px) scale(1.04); }
-    66% { transform: translate(-8px, 10px) scale(0.96); }
-  }
-
-  @keyframes auth-orbit-spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(6px, -10px); }
   }
 
   @keyframes auth-hero-rise {
-    from { opacity: 0; transform: translateY(18px); }
+    from { opacity: 0; transform: translateY(14px); }
     to { opacity: 1; transform: translateY(0); }
-  }
-
-  @keyframes auth-stack-float {
-    0%, 100% { transform: rotateX(14deg) rotateZ(-6deg) translateY(0); }
-    50% { transform: rotateX(14deg) rotateZ(-6deg) translateY(-10px); }
-  }
-
-  @keyframes auth-glow-pulse {
-    0%, 100% { opacity: 0.45; }
-    50% { opacity: 0.75; }
   }
 
   .auth-hero-rise {
@@ -449,15 +433,6 @@
         0 22px 48px -20px hsl(var(--primary) / 0.22),
         0 0 0 1px hsl(var(--primary) / 0.12);
     }
-  }
-
-  .auth-funnel-stack {
-    perspective: 900px;
-    animation: auth-stack-float 6s ease-in-out infinite;
-  }
-  .auth-funnel-layer {
-    transform: rotateX(14deg) rotateZ(-5deg);
-    box-shadow: 0 24px 48px -20px hsl(0 0% 0% / 0.65);
   }
 
   .auth-form-panel {
