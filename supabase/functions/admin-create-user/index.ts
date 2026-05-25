@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { ensureProfile } from "../_shared/ensureProfile.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -60,7 +61,12 @@ Deno.serve(async (req) => {
       return json({ error: error.message }, 400);
     }
 
-    return json({ ok: true, userId: data.user?.id ?? null });
+    const userId = data.user?.id;
+    if (userId) {
+      await ensureProfile(adminClient, userId, email, name);
+    }
+
+    return json({ ok: true, userId: userId ?? null });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
   }

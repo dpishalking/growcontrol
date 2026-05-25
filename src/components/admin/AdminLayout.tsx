@@ -7,22 +7,39 @@ import {
   LogOut,
   ExternalLink,
   Sparkles,
+  UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AddParticipantDialog } from "@/components/admin/AddParticipantDialog";
+import { AdminShellProvider, useAdminShell } from "@/components/admin/AdminShellContext";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { to: "/admin", end: true, label: "Обзор", icon: LayoutDashboard },
-  { to: "/admin/users", label: "Пользователи", icon: Users },
+  { to: "/admin/users", label: "Участники", icon: Users },
   { to: "/admin/projects", label: "Проекты", icon: FolderKanban },
   { to: "/admin/hypotheses", label: "Гипотезы", icon: FlaskConical },
 ];
 
 export function AdminLayout() {
+  return (
+    <AdminShellProvider>
+      <AdminLayoutInner />
+    </AdminShellProvider>
+  );
+}
+
+function AdminLayoutInner() {
   const { pathname } = useLocation();
   const { user, signOut } = useAuth();
   const nav = useNavigate();
+  const {
+    addParticipantOpen,
+    openAddParticipant,
+    closeAddParticipant,
+    notifyParticipantsChanged,
+  } = useAdminShell();
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -57,6 +74,14 @@ export function AdminLayout() {
           ))}
         </nav>
         <div className="p-3 space-y-2 border-t border-border/60">
+          <Button
+            size="sm"
+            className="w-full justify-start bg-gradient-money text-primary-foreground"
+            onClick={openAddParticipant}
+          >
+            <UserPlus className="mr-2 h-4 w-4" />
+            Добавить участника
+          </Button>
           <Button asChild variant="ghost" size="sm" className="w-full justify-start">
             <Link to="/dashboard">
               <ExternalLink className="mr-2 h-4 w-4" />В сервис
@@ -81,6 +106,18 @@ export function AdminLayout() {
         <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-border/60 bg-background/80 backdrop-blur-xl px-4 md:px-6 py-3">
           <h1 className="font-display text-base font-semibold truncate">{titleFromPath(pathname)}</h1>
           <div className="flex items-center gap-2 shrink-0">
+            <AddParticipantDialog
+              open={addParticipantOpen}
+              onOpenChange={(next) => (next ? openAddParticipant() : closeAddParticipant())}
+              onSuccess={notifyParticipantsChanged}
+              trigger={
+                <Button size="sm" className="bg-gradient-money text-primary-foreground">
+                  <UserPlus className="h-3.5 w-3.5 mr-1.5" />
+                  <span className="hidden sm:inline">Добавить участника</span>
+                  <span className="sm:hidden">Добавить</span>
+                </Button>
+              }
+            />
             <span className="hidden sm:inline text-xs text-muted-foreground truncate max-w-[200px]">
               {user?.email}
             </span>
@@ -102,8 +139,8 @@ export function AdminLayout() {
 
 function titleFromPath(p: string): string {
   if (p === "/admin" || p === "/admin/") return "Обзор";
-  if (p.startsWith("/admin/users/")) return "Кабинет пользователя";
-  if (p.startsWith("/admin/users")) return "Пользователи";
+  if (p.startsWith("/admin/users/")) return "Кабинет участника";
+  if (p.startsWith("/admin/users")) return "Участники";
   if (p.startsWith("/admin/projects")) return "Проекты";
   if (p.startsWith("/admin/hypotheses")) return "Гипотезы";
   return "Admin";

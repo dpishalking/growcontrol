@@ -104,7 +104,7 @@ export default function AdminUserDetailPage() {
     return (
       <Card className="border-warning-soft bg-warning-soft">
         <CardContent className="p-4 text-sm text-warning">
-          {error ? `Не удалось загрузить: ${error}` : "Пользователь не найден"}
+          {error ? `Не удалось загрузить: ${error}` : "Участник не найден"}
         </CardContent>
       </Card>
     );
@@ -121,7 +121,7 @@ export default function AdminUserDetailPage() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">{profile.display_name || profile.email || "Пользователь"}</CardTitle>
+          <CardTitle className="text-base">{profile.display_name || profile.email || "Участник"}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-2 text-sm sm:grid-cols-2">
           <div>
@@ -149,7 +149,7 @@ export default function AdminUserDetailPage() {
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           {projects.length === 0 ? (
-            <p className="text-muted-foreground">Пользователь ещё не создал проектов.</p>
+            <p className="text-muted-foreground">Участник ещё не создал проектов.</p>
           ) : (
             projects.map((p) => {
               const meta = (p.metadata ?? {}) as {

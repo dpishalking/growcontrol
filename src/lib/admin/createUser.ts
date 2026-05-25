@@ -1,11 +1,20 @@
 import { supabase } from "@/integrations/supabase/client";
 
 function parseFnError(error: unknown, data: unknown): string | null {
-  if (data && typeof data === "object" && "error" in data && data.error) {
-    return humanizeAdminUserError(String(data.error));
+  if (data && typeof data === "object") {
+    if ("error" in data && data.error) {
+      return humanizeAdminUserError(String(data.error));
+    }
+    if ("ok" in data && data.ok === true) {
+      return null;
+    }
   }
   if (error && typeof error === "object" && "message" in error) {
-    return humanizeAdminUserError(String((error as { message: string }).message));
+    const message = String((error as { message: string }).message);
+    if (data && typeof data === "object" && "error" in data && data.error) {
+      return humanizeAdminUserError(String(data.error));
+    }
+    return humanizeAdminUserError(message);
   }
   return null;
 }
@@ -19,13 +28,20 @@ export function humanizeAdminUserError(msg: string): string {
   if (m.includes("password must be at least")) return "Пароль минимум 6 символов";
   if (m.includes("forbidden")) return "Нет прав администратора";
   if (m.includes("unauthorized")) return "Войдите в аккаунт администратора";
+  if (m.includes("edge function") || m.includes("failed to send")) {
+    return "Не удалось вызвать серверную функцию. Проверьте деплой admin-create-user / admin-invite-user.";
+  }
   return msg;
 }
+
+export type AdminUserActionResult =
+  | { ok: true; userId: string | null }
+  | { error: string };
 
 export async function inviteUserByEmail(
   email: string,
   name?: string,
-): Promise<{ ok: true } | { error: string }> {
+): Promise<AdminUserActionResult> {
   const { data, error } = await supabase.functions.invoke("admin-invite-user", {
     body: {
       email: email.trim().toLowerCase(),
@@ -37,14 +53,19 @@ export async function inviteUserByEmail(
   const parsed = parseFnError(error, data);
   if (parsed) return { error: parsed };
 
-  return { ok: true };
+  const userId =
+    data && typeof data === "object" && "userId" in data
+      ? (data.userId as string | null)
+      : null;
+
+  return { ok: true, userId };
 }
 
 export async function createUserByAdmin(input: {
   email: string;
   password: string;
   name?: string;
-}): Promise<{ ok: true } | { error: string }> {
+}): Promise<AdminUserActionResult> {
   const { data, error } = await supabase.functions.invoke("admin-create-user", {
     body: {
       email: input.email.trim().toLowerCase(),
@@ -56,7 +77,12 @@ export async function createUserByAdmin(input: {
   const parsed = parseFnError(error, data);
   if (parsed) return { error: parsed };
 
-  return { ok: true };
+  const userId =
+    data && typeof data === "object" && "userId" in data
+      ? (data.userId as string | null)
+      : null;
+
+  return { ok: true, userId };
 }
 
 export function generateTempPassword(length = 10): string {
