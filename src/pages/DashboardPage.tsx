@@ -1,7 +1,6 @@
-import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, CreditCard, FlaskConical, FolderPlus, Layers, Target } from "lucide-react";
-import { toast } from "sonner";
+import { useRef, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { FolderPlus, FlaskConical, Sparkles, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,23 +12,32 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { PageHeader } from "@/components/layout/PageHeader";
 import { ActiveTestCard } from "@/features/dashboard/ActiveTestCard";
+import { DashboardHero } from "@/features/dashboard/DashboardHero";
+import { DashboardMetrics } from "@/features/dashboard/DashboardMetrics";
+import { DashboardProjectCard } from "@/features/dashboard/DashboardProjectCard";
+import { ProjectFunnelsPanel } from "@/features/dashboard/ProjectFunnelsPanel";
+import { useDashboardSnapshot } from "@/features/dashboard/useDashboardSnapshot";
 import { useAppData } from "@/context/AppDataContext";
-import { formatDate } from "@/utils/format";
-import type { Hypothesis } from "@/types/hypothesis";
-
-type ActiveItem = { hypothesis: Hypothesis; projectId: string };
+import { useAuth } from "@/hooks/useAuth";
+import { BILLING_ENABLED } from "@/lib/productFlags";
+import { resolveProjectOpenTarget } from "@/lib/projectNavigation";
+import { getStorageScope } from "@/features/quiz/quizDraftStorage";
 
 export default function DashboardPage() {
   const nav = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const funnelsPanelRef = useRef<HTMLDivElement>(null);
+  const { user: authUser } = useAuth();
+  const scope = getStorageScope(authUser?.id);
   const {
     user,
     projects,
     canAddProject,
-    currentPlan,
+    getProject,
     projectFunnels,
     funnelHypotheses,
+    funnelMetricsList,
     experimentByHypothesis,
     createEmptyProject,
   } = useAppData();
@@ -37,34 +45,13 @@ export default function DashboardPage() {
   const [newOpen, setNewOpen] = useState(false);
   const [newName, setNewName] = useState("");
 
-  const activeTests = useMemo(() => {
-    const items: ActiveItem[] = [];
-    for (const p of projects) {
-      for (const f of projectFunnels(p.id)) {
-        for (const h of funnelHypotheses(f.id)) {
-          if (h.status === "backlog" || h.status === "testing") {
-            items.push({ hypothesis: h, projectId: p.id });
-          }
-        }
-      }
-    }
-    return items.sort((a, b) => {
-      const order = (s: Hypothesis["status"]) => (s === "testing" ? 0 : 1);
-      const d = order(a.hypothesis.status) - order(b.hypothesis.status);
-      if (d !== 0) return d;
-      return b.hypothesis.priorityScore - a.hypothesis.priorityScore;
-    });
-  }, [projects, projectFunnels, funnelHypotheses]);
+  const selectedProjectId = searchParams.get("project");
+  const selectedProject = selectedProjectId ? getProject(selectedProjectId) : null;
 
-  const inWork = activeTests.filter((x) => x.hypothesis.status === "testing").length;
-  const inQueue = activeTests.filter((x) => x.hypothesis.status === "backlog").length;
+  const snapshot = useDashboardSnapshot(projects, projectFunnels, funnelHypotheses, funnelMetricsList);
 
   const handleCreate = () => {
-    if (!canAddProject) {
-      toast.error("Лимит проектов на тарифе — перейдите на Starter/Pro");
-      nav("/billing");
-      return;
-    }
+    if (BILLING_ENABLED && !canAddProject) return;
     const p = createEmptyProject(newName || "Новый проект");
     if (!p) return;
     setNewOpen(false);
@@ -72,48 +59,59 @@ export default function DashboardPage() {
     nav(`/projects/${p.id}/funnels/new/wizard/focus`);
   };
 
+  const openProject = (projectId: string) => {
+    const funnels = projectFunnels(projectId);
+    const target = resolveProjectOpenTarget(projectId, funnels, scope);
+
+    if (target.kind === "navigate") {
+      nav(target.path);
+      return;
+    }
+
+    setSearchParams({ project: projectId });
+    requestAnimationFrame(() => {
+      funnelsPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
+  const closeProjectPanel = () => {
+    setSearchParams({});
+  };
+
   return (
-    <>
-      <PageHeader
-        title={`Привет, ${user.name.split(" ")[0]}`}
-        subtitle="Управляйте ростом через тестирование гипотез. Каждая гипотеза — под конкретную метрику конкретной воронки."
-        action={
-          <Button onClick={() => setNewOpen(true)} className="bg-gradient-money text-primary-foreground">
-            <FolderPlus className="mr-2 h-4 w-4" />
-            Новый проект
-          </Button>
-        }
+    <div className="dashboard-page pb-4">
+      <DashboardHero
+        name={user.name}
+        projectCount={snapshot.totals.projects}
+        activeTests={snapshot.activeTests.length}
+        redMetrics={snapshot.totals.redMetrics}
+        onNewProject={() => setNewOpen(true)}
       />
 
-      <div className="grid gap-3 sm:grid-cols-3 mb-8">
-        <StatChip label="Тариф" value={currentPlan.name} icon={<CreditCard className="h-4 w-4" />} />
-        <StatChip label="Кредиты" value={String(user.credits)} icon={<Layers className="h-4 w-4" />} />
-        <StatChip
-          label="В плане"
-          value={String(activeTests.length)}
-          accent={activeTests.length > 0}
-          icon={<FlaskConical className="h-4 w-4" />}
-          hint={activeTests.length > 0 ? `${inWork} в работе · ${inQueue} в очереди` : undefined}
-        />
-      </div>
+      <DashboardMetrics
+        projects={snapshot.totals.projects}
+        funnels={snapshot.totals.funnels}
+        activeTests={snapshot.activeTests.length}
+        redMetrics={snapshot.totals.redMetrics}
+        inWork={snapshot.inWork}
+        inQueue={snapshot.inQueue}
+      />
 
-      {activeTests.length > 0 ? (
-        <section className="mb-8 space-y-3">
+      {snapshot.activeTests.length > 0 ? (
+        <section className="mb-10 space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-2">
-            <h2 className="font-display text-lg font-semibold flex items-center gap-2">
-              <FlaskConical className="h-5 w-5 text-success" />
-              Активные тесты
-            </h2>
-            {inWork > 0 || inQueue > 0 ? (
-              <p className="text-xs text-muted-foreground">
-                {inWork > 0 ? `${inWork} в работе` : null}
-                {inWork > 0 && inQueue > 0 ? " · " : null}
-                {inQueue > 0 ? `${inQueue} в очереди` : null}
+            <div>
+              <h2 className="flex items-center gap-2 font-display text-xl font-semibold">
+                <FlaskConical className="h-5 w-5 text-success" />
+                Сейчас в фокусе
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Тесты, которые уже в работе или ждут старта
               </p>
-            ) : null}
+            </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {activeTests.map(({ hypothesis: h, projectId }) => (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {snapshot.activeTests.map(({ hypothesis: h, projectId }) => (
               <ActiveTestCard
                 key={h.id}
                 hypothesis={h}
@@ -125,73 +123,94 @@ export default function DashboardPage() {
         </section>
       ) : null}
 
-      <section className="space-y-3">
-        <h2 className="font-display text-lg font-semibold">Проекты</h2>
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="font-display text-xl font-semibold">Ваши проекты</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Нажмите на карточку — откроем воронку или покажем список
+            </p>
+          </div>
+          {projects.length > 0 ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setNewOpen(true)}
+              className="border-border/60 bg-background/40"
+            >
+              <FolderPlus className="mr-1.5 h-4 w-4" />
+              Добавить
+            </Button>
+          ) : null}
+        </div>
+
         {projects.length === 0 ? (
-          <Card className="border-dashed border-border/60 bg-card/40">
-            <CardContent className="py-14 text-center space-y-4">
-              <div className="mx-auto h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center">
-                <Target className="h-6 w-6 text-primary" />
+          <Card className="dashboard-empty overflow-hidden border-dashed border-primary/20 bg-card/20">
+            <CardContent className="relative space-y-5 py-16 text-center">
+              <div className="dashboard-empty-glow pointer-events-none" aria-hidden />
+              <div className="relative mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10">
+                <Target className="h-7 w-7 text-primary" />
               </div>
-              <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
-                Создайте проект и пройдите мастер одной воронки: фокус → материалы → аудит →
-                метрики → гипотезы → тесты.
-              </p>
-              <Button onClick={() => setNewOpen(true)} className="bg-gradient-money text-primary-foreground">
-                <FolderPlus className="mr-2 h-4 w-4" />
-                Создать проект
+              <div className="relative mx-auto max-w-md space-y-2">
+                <p className="font-display text-lg font-semibold">Первый проект — первый рост</p>
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  Один продукт, одна воронка, конкретные метрики. Мастер проведёт от фокуса до плана
+                  тестов — без лишних экранов.
+                </p>
+              </div>
+              <Button
+                onClick={() => setNewOpen(true)}
+                className="relative bg-gradient-money text-primary-foreground shadow-glow"
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                Начать
               </Button>
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {projects.map((p) => {
-              const funnels = projectFunnels(p.id);
-              return (
-                <Card
-                  key={p.id}
-                  role="button"
-                  tabIndex={0}
-                  className="surface h-full transition-all hover:border-primary/40 hover:shadow-glow cursor-pointer"
-                  onClick={() => nav(`/projects/${p.id}`)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      nav(`/projects/${p.id}`);
-                    }
-                  }}
-                >
-                  <CardContent className="p-5 space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="font-medium leading-snug">{p.projectName}</p>
-                      <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                    </div>
-                    <div className="flex items-center gap-2 text-[11px]">
-                      <span className="chip">воронок {funnels.length}</span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      Обновлён {formatDate(p.updatedAt)}
-                    </p>
-                  </CardContent>
-                </Card>
-              );
-            })}
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {snapshot.projectCards.map((model) => (
+              <DashboardProjectCard
+                key={model.project.id}
+                model={model}
+                selected={selectedProjectId === model.project.id}
+                onOpen={() => openProject(model.project.id)}
+              />
+            ))}
           </div>
         )}
       </section>
 
+      {selectedProject ? (
+        <div ref={funnelsPanelRef} className="mt-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <ProjectFunnelsPanel project={selectedProject} onClose={closeProjectPanel} />
+        </div>
+      ) : selectedProjectId ? (
+        <Card className="mt-8 border-warning-soft bg-warning-soft">
+          <CardContent className="space-y-3 p-5">
+            <p className="text-sm text-warning">Проект не найден.</p>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/dashboard">Обновить список</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Dialog open={newOpen} onOpenChange={setNewOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm border-border/60 bg-card">
           <DialogHeader>
-            <DialogTitle>Новый проект</DialogTitle>
+            <DialogTitle className="font-display">Новый проект</DialogTitle>
           </DialogHeader>
           <div className="space-y-1.5">
-            <Label className="text-xs">Название проекта</Label>
+            <Label className="text-xs text-muted-foreground">Название</Label>
             <Input
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder="Например: Клиника флебологии"
+              placeholder="Например: Продажа шарфиков"
               autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCreate();
+              }}
             />
           </div>
           <DialogFooter>
@@ -204,41 +223,6 @@ export default function DashboardPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
-  );
-}
-
-function StatChip({
-  label,
-  value,
-  accent,
-  icon,
-  hint,
-}: {
-  label: string;
-  value: string;
-  accent?: boolean;
-  icon?: React.ReactNode;
-  hint?: string;
-}) {
-  return (
-    <div
-      className={`surface px-4 py-3 flex items-center gap-3 ${
-        accent ? "!border-success/30 bg-success/5" : ""
-      }`}
-    >
-      <div
-        className={`h-9 w-9 rounded-xl flex items-center justify-center ${
-          accent ? "bg-success/15 text-success" : "bg-primary/10 text-primary"
-        }`}
-      >
-        {icon}
-      </div>
-      <div className="min-w-0">
-        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
-        <p className="font-display text-lg font-bold tabular-nums leading-tight">{value}</p>
-        {hint ? <p className="text-[10px] text-muted-foreground mt-0.5">{hint}</p> : null}
-      </div>
     </div>
   );
 }

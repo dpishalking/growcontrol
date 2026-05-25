@@ -119,6 +119,7 @@ import type { FunnelStageDefinition, FunnelTypeId } from "@/types/funnelType";
 import { loadStore, saveStore, setStorageScope, type MockStore } from "@/services/storage";
 import { useAuth } from "@/hooks/useAuth";
 import { logProjectActivity, resolveProjectIdForFunnel, syncAllProjectsToRemote, syncProjectToRemote } from "@/services/projectSyncService";
+import { BILLING_ENABLED } from "@/lib/productFlags";
 
 type AppDataContextValue = {
   store: MockStore;
@@ -319,14 +320,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       projects: getProjects(store),
       getProject: (id) => getProjectById(store, id),
       createProject: (input) => {
-        if (!canCreateProject(store, maxProjects)) return null;
+        if (BILLING_ENABLED && !canCreateProject(store, maxProjects)) return null;
         const p = createProjectFromIntake(store, input);
         persist(store);
         syncProject(p, store, { type: "project_created", title: "Проект создан", description: p.projectName });
         return p;
       },
       createEmptyProject: (name) => {
-        if (!canCreateProject(store, maxProjects)) return null;
+        if (BILLING_ENABLED && !canCreateProject(store, maxProjects)) return null;
         const p = createBlankProject(store, name);
         persist(store);
         syncProject(p, store, { type: "project_created", title: "Проект создан", description: p.projectName });
@@ -344,7 +345,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       // Billing
       currentPlan: getCurrentPlan(store),
       maxProjects,
-      canAddProject: canCreateProject(store, maxProjects),
+      canAddProject: !BILLING_ENABLED || canCreateProject(store, maxProjects),
       setPlan: (planId) => {
         changePlan(store, planId);
         persist(store);

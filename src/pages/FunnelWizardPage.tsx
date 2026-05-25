@@ -10,6 +10,7 @@ import { SignalsStep } from "@/features/wizard/steps/SignalsStep";
 import { HypothesesStep } from "@/features/wizard/steps/HypothesesStep";
 import { PlanStep } from "@/features/wizard/steps/PlanStep";
 import type { WizardStepId } from "@/features/wizard/wizardSteps";
+import { projectDashboardPath } from "@/lib/projectNavigation";
 
 const STEP_IDS: WizardStepId[] = [
   "focus",
@@ -73,8 +74,8 @@ export default function FunnelWizardPage() {
       <PageHeader
         title={funnel ? `Воронка: ${funnel.productName || "без названия"}` : "Новая воронка"}
         subtitle="Шаги мастера → одна воронка → конкретные гипотезы по метрикам"
-        backTo={`/projects/${projectId}`}
-        backLabel="К проекту"
+        backTo={projectDashboardPath(projectId)}
+        backLabel="К проектам"
       />
 
       {stepId === "focus" ? (

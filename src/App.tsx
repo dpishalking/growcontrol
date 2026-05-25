@@ -22,6 +22,7 @@ import AdminUsersPage from "@/pages/admin/AdminUsersPage";
 import AdminProjectsPage from "@/pages/admin/AdminProjectsPage";
 import AdminHypothesesPage from "@/pages/admin/AdminHypothesesPage";
 import AdminUserDetailPage from "@/pages/admin/AdminUserDetailPage";
+import { BILLING_ENABLED } from "@/lib/productFlags";
 
 const queryClient = new QueryClient();
 
@@ -73,7 +74,10 @@ export default function App() {
                     path="/projects/:projectId/funnels/:funnelId"
                     element={<FunnelOverviewPage />}
                   />
-                  <Route path="/billing" element={<BillingPage />} />
+                  <Route
+                    path="/billing"
+                    element={BILLING_ENABLED ? <BillingPage /> : <Navigate to="/dashboard" replace />}
+                  />
                 </Route>
 
                 <Route

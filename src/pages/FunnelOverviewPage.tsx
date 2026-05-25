@@ -10,6 +10,7 @@ import { buildDiagnostics } from "@/utils/funnelDiagnostics";
 import { sortByPriority, BUCKET_LABELS } from "@/utils/icePriority";
 import { wizardStepByIndex } from "@/features/wizard/wizardSteps";
 import { getStageLabelForFunnel } from "@/utils/funnelStages";
+import { projectDashboardPath } from "@/lib/projectNavigation";
 
 export default function FunnelOverviewPage() {
   const { projectId, funnelId } = useParams<{ projectId: string; funnelId: string }>();
@@ -47,8 +48,8 @@ export default function FunnelOverviewPage() {
       <PageHeader
         title={funnel.productName || "Воронка"}
         subtitle={`${funnel.trafficSource || "—"} → ${funnel.landingUrl || "—"} · Цель: ${funnel.funnelGoal || "—"}${typeName ? ` · ${typeName}` : ""}`}
-        backTo={`/projects/${projectId}`}
-        backLabel="К проекту"
+        backTo={projectDashboardPath(projectId)}
+        backLabel="К проектам"
         action={
           <Button asChild className="bg-gradient-money text-primary-foreground">
             <Link to={`/projects/${projectId}/funnels/${funnel.id}/wizard/${nextStep.id}`}>
