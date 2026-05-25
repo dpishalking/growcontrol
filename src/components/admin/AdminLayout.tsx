@@ -6,11 +6,11 @@ import {
   FolderKanban,
   LogOut,
   ExternalLink,
-  Sparkles,
   UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AddParticipantDialog } from "@/components/admin/AddParticipantDialog";
+import { AppBrand } from "@/components/layout/AppBrand";
 import { AdminShellProvider, useAdminShell } from "@/components/admin/AdminShellContext";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -45,12 +45,14 @@ function AdminLayoutInner() {
     <div className="min-h-screen bg-background flex">
       <aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-border/60 bg-card/60 backdrop-blur">
         <div className="px-5 py-5 border-b border-border/60">
-          <Link to="/admin" className="flex items-center gap-2 font-display font-semibold">
-            <span className="h-7 w-7 rounded-lg bg-gradient-money flex items-center justify-center text-primary-foreground">
-              <Sparkles className="h-3.5 w-3.5" />
-            </span>
-            <span className="tracking-tight">GrowControl</span>
-            <span className="ml-1 text-[10px] uppercase tracking-widest text-muted-foreground">admin</span>
+          <Link to="/admin" className="block">
+            <AppBrand
+              suffix={
+                <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                  admin
+                </span>
+              }
+            />
           </Link>
         </div>
         <nav className="flex-1 p-2 space-y-0.5">

@@ -7,8 +7,11 @@ import { getFunnelTypeTemplate } from "@/data/funnelTypes/catalog";
 import { buildHypothesisFromDirection } from "@/lib/buildHypothesisFromDirection";
 import { auditDraftsForMetric } from "@/lib/hypothesisMetricContext";
 import type { FunnelAuditHypothesisDraft } from "@/types/funnelAudit";
+import type { MetricHypothesesApiPayload } from "@/types/metricHypotheses";
 import { linkHypothesisToMetric } from "./funnelMetricService";
 import { getFunnelById } from "./funnelService";
+import { getMaterialsByFunnel } from "./materialService";
+import { runMetricHypothesesApi } from "./hypothesisAiApi";
 import type { MockStore } from "./storage";
 
 function clamp(v: number | undefined, fallback: number): number {
@@ -266,4 +269,83 @@ function inferMaterialsFromAuditDraft(d: FunnelAuditHypothesisDraft): string[] {
   if (text.includes("скрипт") || d.channel === "sales") out.push("Сценарий вебинара");
   if (text.includes("письм") || text.includes("дожим")) out.push("Сообщения после вебинара");
   return out;
+}
+
+export function buildMetricHypothesesPayload(
+  store: MockStore,
+  funnelId: string,
+  metric: FunnelMetric,
+): MetricHypothesesApiPayload | null {
+  const funnel = getFunnelById(store, funnelId);
+  if (!funnel) return null;
+
+  const typeTemplate = getFunnelTypeTemplate(funnel.funnelTypeId ?? undefined);
+  const materials = getMaterialsByFunnel(store, funnelId);
+  const stageMaterials = materials.filter((m) => m.funnelStage === metric.stage);
+  const matsForPrompt = (stageMaterials.length > 0 ? stageMaterials : materials).slice(0, 8);
+
+  const existing = store.hypotheses
+    .filter((h) => h.funnelId === funnelId && h.metricId === metric.id)
+    .flatMap((h) => [h.title, h.ifChange])
+    .filter(Boolean);
+
+  const audit = funnel.auditSnapshot?.report;
+  const auditSummary = audit
+    ? [audit.diagnosis?.mainProblem, audit.diagnosis?.mainMoneyLeak, audit.quickestWin?.action]
+        .filter(Boolean)
+        .join(" · ")
+    : undefined;
+
+  return {
+    funnel: {
+      typeId: funnel.funnelTypeId ?? "service_lead",
+      typeName: typeTemplate.name,
+      exampleFlow: typeTemplate.exampleFlow,
+      productName: funnel.productName,
+      productDescription: funnel.productDescription,
+      trafficSource: funnel.trafficSource,
+      targetAudience: funnel.targetAudience,
+      funnelGoal: funnel.funnelGoal,
+      currentProblem: funnel.currentProblem,
+    },
+    metric: {
+      id: metric.id,
+      name: metric.name,
+      stage: metric.stage,
+      unit: metric.unit,
+      plannedValue: metric.plannedValue,
+      actualValue: metric.actualValue,
+      direction: metric.direction,
+      status: metric.status,
+      achievementPercent: metric.achievementPercent,
+      comment: metric.comment,
+    },
+    materials: matsForPrompt.map((m) => ({
+      type: m.type,
+      title: m.title,
+      stage: m.funnelStage,
+      content: m.content,
+      extractedText: m.attachment?.extractedText,
+    })),
+    existingHypotheses: existing,
+    auditSummary,
+  };
+}
+
+/** Генерация гипотез через AI под одну метрику. */
+export async function generateAiHypothesesForMetric(
+  store: MockStore,
+  funnelId: string,
+  metric: FunnelMetric,
+): Promise<Hypothesis[]> {
+  const payload = buildMetricHypothesesPayload(store, funnelId, metric);
+  if (!payload) throw new Error("Не удалось собрать данные воронки");
+
+  const { hypotheses } = await runMetricHypothesesApi(payload);
+  const drafts: FunnelAuditHypothesisDraft[] = hypotheses.map((h) => ({
+    ...h,
+    metricName: metric.name,
+  }));
+
+  return importHypothesesFromAudit(store, funnelId, drafts, metric);
 }

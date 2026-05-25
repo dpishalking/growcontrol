@@ -12,7 +12,7 @@ export default defineConfig(({ mode: _mode }) => ({
     host: "::",
     port: 8081,
     hmr: {
-      overlay: false,
+      overlay: true,
     },
   },
   plugins: [react()],

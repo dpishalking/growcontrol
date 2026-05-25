@@ -47,9 +47,9 @@ export function HypothesisCard({
           <div className="flex items-start gap-1 px-3 py-2.5">
             <AccordionTrigger className="flex-1 min-w-0 py-0 hover:no-underline text-left items-start gap-2 [&>svg]:shrink-0 [&>svg]:mt-1">
               <div className="min-w-0 flex-1 space-y-1">
-                <p className="text-sm font-medium leading-snug line-clamp-2">{h.title}</p>
+                <p className="text-sm font-medium leading-relaxed break-words">{h.title}</p>
                 {preview ? (
-                  <p className="text-xs text-muted-foreground line-clamp-1">→ {preview}</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed break-words">→ {preview}</p>
                 ) : null}
                 <p className="text-[11px] text-muted-foreground">
                   ICE {h.priorityScore} · {BUCKET_LABELS[h.bucket].label} · {statusLabel(h)}

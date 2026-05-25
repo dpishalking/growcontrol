@@ -1,7 +1,7 @@
 import { Link, Navigate, useParams } from "react-router-dom";
 import { FlaskConical, FileText, Layers, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useAppData } from "@/context/AppDataContext";
@@ -17,7 +17,6 @@ export default function FunnelOverviewPage() {
     getProject,
     getFunnel,
     funnelMaterials,
-    funnelFindings,
     funnelMetricsList,
     funnelHypotheses,
     funnelExperiments,
@@ -29,7 +28,6 @@ export default function FunnelOverviewPage() {
   if (!project || !funnel) return <Navigate to="/dashboard" replace />;
 
   const materials = funnelMaterials(funnel.id);
-  const findings = funnelFindings(funnel.id);
   const metrics = funnelMetricsList(funnel.id);
   const hypotheses = funnelHypotheses(funnel.id);
   const experiments = funnelExperiments(funnel.id);
@@ -109,37 +107,13 @@ export default function FunnelOverviewPage() {
                     ICE {h.priorityScore}
                   </Badge>
                   <Badge variant="outline" className="text-[10px]">
-                    {BUCKET_LABELS[h.bucket].label}
+                    {BUCKET_LABELS[h.bucket]?.label ?? h.bucket}
                   </Badge>
                   <span>Метрика: {h.metricName}</span>
                 </p>
               </li>
             ))}
           </ul>
-        )}
-      </section>
-
-      <section>
-        <h2 className="font-display text-lg font-semibold mb-3">Аудит вкратце</h2>
-        {findings.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Аудит ещё не запускался.{" "}
-            <Link
-              to={`/projects/${projectId}/funnels/${funnel.id}/wizard/audit`}
-              className="text-primary hover:underline"
-            >
-              Запустить
-            </Link>
-          </p>
-        ) : (
-          <Card className="border-border/60">
-            <CardContent className="p-4 grid gap-2 text-sm">
-              <Row label="Сильные стороны" count={findings.filter((f) => f.findingType === "strength").length} />
-              <Row label="Слабые места" count={findings.filter((f) => f.findingType === "weakness").length} />
-              <Row label="Нет данных" count={findings.filter((f) => f.findingType === "missing_data").length} />
-              <Row label="Риски" count={findings.filter((f) => f.findingType === "risk").length} />
-            </CardContent>
-          </Card>
         )}
       </section>
     </>
@@ -169,16 +143,5 @@ function Stat({
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-function Row({ label, count }: { label: string; count: number }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span>{label}</span>
-      <Badge variant="outline" className="text-[10px] tabular-nums">
-        {count}
-      </Badge>
-    </div>
   );
 }

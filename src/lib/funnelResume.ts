@@ -28,11 +28,16 @@ export function funnelNeedsResume(funnel: Funnel): boolean {
 }
 
 export function funnelResumeLabel(funnel: Funnel): string {
-  const step = wizardStepByIndex(funnel.currentWizardStep);
-  if (funnel.status === "draft" && funnel.currentWizardStep <= 1) {
+  const step = wizardStepByIndex(funnel.currentWizardStep ?? 1);
+  if (funnel.status === "draft" && (funnel.currentWizardStep ?? 1) <= 1) {
     const idx = funnel.wizardQuizProgress?.focus?.questionIndex ?? 0;
     const q = FOCUS_QUIZ.questions[Math.min(idx, FOCUS_QUIZ.questions.length - 1)];
-    return q ? `Квиз: ${q.section ?? "фокус"} — «${q.title.slice(0, 40)}…»` : "Продолжить квиз";
+    const title = q?.title?.trim();
+    if (title) {
+      const short = title.length > 40 ? `${title.slice(0, 40)}…` : title;
+      return `Квиз: ${q?.section ?? "фокус"} — «${short}»`;
+    }
+    return "Продолжить квиз";
   }
   return `Шаг ${step.index}: ${step.title}`;
 }

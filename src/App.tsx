@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/hooks/useAuth";
 import { AppDataProvider } from "@/context/AppDataContext";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -44,8 +45,22 @@ export default function App() {
                     </RequireAuth>
                   }
                 >
-                  <Route path="/dashboard" element={<DashboardPage />} />
-                  <Route path="/projects/:projectId" element={<ProjectPage />} />
+                  <Route
+                    path="/dashboard"
+                    element={
+                      <ErrorBoundary fallbackTitle="Ошибка на главной">
+                        <DashboardPage />
+                      </ErrorBoundary>
+                    }
+                  />
+                  <Route
+                    path="/projects/:projectId"
+                    element={
+                      <ErrorBoundary fallbackTitle="Не удалось открыть проект">
+                        <ProjectPage />
+                      </ErrorBoundary>
+                    }
+                  />
                   <Route
                     path="/projects/:projectId/funnels/new/wizard/:step"
                     element={<FunnelWizardPage />}

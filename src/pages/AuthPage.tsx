@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowRight, Loader2, Mail, Sparkles } from "lucide-react";
+import { ArrowRight, Loader2, Mail } from "lucide-react";
+import { AppBrand } from "@/components/layout/AppBrand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -99,11 +100,8 @@ export default function AuthPage() {
       />
 
       <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col justify-center px-5 py-8 sm:px-8 lg:px-10">
-        <div className="mb-8 flex items-center gap-2 font-display text-lg font-bold lg:mb-10">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-money text-primary-foreground">
-            <Sparkles className="h-4 w-4" />
-          </span>
-          GrowControl
+        <div className="mb-8 lg:mb-10">
+          <AppBrand iconClassName="h-9 w-9 rounded-xl" />
         </div>
 
         <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(300px,380px)] lg:gap-14 xl:gap-20">

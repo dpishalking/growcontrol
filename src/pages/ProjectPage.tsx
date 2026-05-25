@@ -25,7 +25,18 @@ export default function ProjectPage() {
 
   if (!projectId) return <Navigate to="/dashboard" replace />;
   const project = getProject(projectId);
-  if (!project) return <Navigate to="/dashboard" replace />;
+  if (!project) {
+    return (
+      <Card className="border-warning-soft bg-warning-soft">
+        <CardContent className="p-6 space-y-3">
+          <p className="text-sm text-warning">Проект не найден. Возможно, он был удалён или данные ещё загружаются.</p>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/dashboard">Вернуться к проектам</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const funnels = projectFunnels(projectId);
   const focusDraft = loadFocusDraft(scope, projectId);
@@ -69,7 +80,7 @@ export default function ProjectPage() {
               {draftFunnels.slice(0, 2).map((f) => (
                 <Button key={f.id} asChild size="sm" variant={f.status === "draft" ? "default" : "outline"}>
                   <Link to={funnelResumePath(projectId, f)}>
-                    {funnel.productName || "Воронка"} — {funnelResumeLabel(f)}
+                    {f.productName || "Воронка"} — {funnelResumeLabel(f)}
                   </Link>
                 </Button>
               ))}

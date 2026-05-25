@@ -3,13 +3,15 @@ import { resolveMetricEvaluationKind } from "@/utils/funnelDiagnostics";
 import type { FunnelAuditHypothesisDraft, FunnelAuditReport } from "@/types/funnelAudit";
 import type { FunnelMetric } from "@/types/funnelMetric";
 
+// Узкие, специфичные слова для матча метрик в текстах аудита (подсказки и блоки этапов).
+// Сюда НЕЛЬЗЯ класть общие слова вроде «вебинар» — они приведут к ложным срабатываниям.
 const METRIC_KEYWORDS: Record<string, string[]> = {
-  ctr: ["ctr", "клик", "клики", "объяв", "креатив", "трафик"],
-  cpc: ["cpc", "клик", "стоимость клика"],
-  "стоимость регистрации": ["регistr", "cpl", "reg", "посадоч", "лендинг"],
-  "конверсия страницы в регистрацию": ["регistr", "конверс", "лендинг", "reg"],
-  "процент доходимости": ["доходим", "вебинар", "напомин"],
-  "стоимость заявки": ["заявк", "лид", "форма"],
+  ctr: ["ctr", "кликабельн"],
+  cpc: ["cpc", "стоимость клика"],
+  "стоимость регистрации": ["стоимость регистрац", "cpl регистрац"],
+  "конверсия страницы в регистрацию": ["конверс страниц в регистрац", "cr в регистрац"],
+  "процент доходимости": ["доходим", "show-up", "show up"],
+  "стоимость заявки": ["стоимость заявк", "cpl"],
 };
 
 export function metricGapLabel(m: FunnelMetric): string {
@@ -77,15 +79,27 @@ export function auditHintForMetric(
   return null;
 }
 
+/**
+ * Жёсткий матчинг: гипотезы аудита привязываем к метрике ТОЛЬКО по её `metricName`.
+ * Сравнение по заголовку выключено — оно даёт ложные срабатывания
+ * (например слово «вебинар» матчилось ко всему подряд).
+ */
 export function auditDraftsForMetric(
   drafts: FunnelAuditHypothesisDraft[],
   metric: FunnelMetric,
 ): FunnelAuditHypothesisDraft[] {
+  const mk = normalizeMetricKey(metric.name);
+  if (!mk) return [];
   return drafts.filter((d) => {
     const dk = normalizeMetricKey(d.metricName);
-    const mk = normalizeMetricKey(metric.name);
-    if (dk === mk || dk.includes(mk) || mk.includes(dk)) return true;
-    return textMatchesMetric(d.title + " " + d.expectedImpact, metric.name);
+    if (!dk) return false;
+    if (dk === mk) return true;
+    // Допускаем включение только если совпадает «осмысленная» часть имени
+    // (длинная подстрока ≥ 6 символов), чтобы не цеплять родовые слова.
+    const minLen = 6;
+    if (dk.length >= minLen && mk.includes(dk)) return true;
+    if (mk.length >= minLen && dk.includes(mk)) return true;
+    return false;
   });
 }
 

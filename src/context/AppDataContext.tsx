@@ -467,7 +467,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         const report = normalizeFunnelAudit(audit);
         const typeTemplate = getFunnelTypeTemplate(funnel.funnelTypeId ?? "service_lead");
         const materials = getMaterialsByFunnel(store, funnelId);
-        const metrics = getMetricsByFunnel(store, funnelId, funnel.stages.map((s) => s.id));
+        const metrics = getMetricsByFunnel(store, funnelId, funnel.stages?.map((s) => s.id) ?? []);
         const snapshot: FunnelAuditSnapshot = {
           report,
           generatedAt: new Date().toISOString(),
@@ -509,7 +509,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       // Funnel metrics
       funnelMetricsList: (id) => {
         const f = getFunnelById(store, id);
-        return getMetricsByFunnel(store, id, f?.stages.map((s) => s.id) ?? []);
+        return getMetricsByFunnel(store, id, f?.stages?.map((s) => s.id) ?? []);
       },
       addFunnelMetric: (input) => {
         const m = createFunnelMetric(store, input);

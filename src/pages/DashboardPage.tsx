@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, CreditCard, FlaskConical, FolderPlus, Layers, Target } from "lucide-react";
 import { toast } from "sonner";
@@ -14,8 +14,12 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ActiveTestCard } from "@/features/dashboard/ActiveTestCard";
 import { useAppData } from "@/context/AppDataContext";
 import { formatDate } from "@/utils/format";
+import type { Hypothesis } from "@/types/hypothesis";
+
+type ActiveItem = { hypothesis: Hypothesis; projectId: string };
 
 export default function DashboardPage() {
   const nav = useNavigate();
@@ -24,13 +28,36 @@ export default function DashboardPage() {
     projects,
     canAddProject,
     currentPlan,
-    testingHypotheses,
     projectFunnels,
+    funnelHypotheses,
+    experimentByHypothesis,
     createEmptyProject,
   } = useAppData();
 
   const [newOpen, setNewOpen] = useState(false);
   const [newName, setNewName] = useState("");
+
+  const activeTests = useMemo(() => {
+    const items: ActiveItem[] = [];
+    for (const p of projects) {
+      for (const f of projectFunnels(p.id)) {
+        for (const h of funnelHypotheses(f.id)) {
+          if (h.status === "backlog" || h.status === "testing") {
+            items.push({ hypothesis: h, projectId: p.id });
+          }
+        }
+      }
+    }
+    return items.sort((a, b) => {
+      const order = (s: Hypothesis["status"]) => (s === "testing" ? 0 : 1);
+      const d = order(a.hypothesis.status) - order(b.hypothesis.status);
+      if (d !== 0) return d;
+      return b.hypothesis.priorityScore - a.hypothesis.priorityScore;
+    });
+  }, [projects, projectFunnels, funnelHypotheses]);
+
+  const inWork = activeTests.filter((x) => x.hypothesis.status === "testing").length;
+  const inQueue = activeTests.filter((x) => x.hypothesis.status === "backlog").length;
 
   const handleCreate = () => {
     if (!canAddProject) {
@@ -62,37 +89,37 @@ export default function DashboardPage() {
         <StatChip label="Тариф" value={currentPlan.name} icon={<CreditCard className="h-4 w-4" />} />
         <StatChip label="Кредиты" value={String(user.credits)} icon={<Layers className="h-4 w-4" />} />
         <StatChip
-          label="В тесте"
-          value={String(testingHypotheses.length)}
-          accent={testingHypotheses.length > 0}
+          label="В плане"
+          value={String(activeTests.length)}
+          accent={activeTests.length > 0}
           icon={<FlaskConical className="h-4 w-4" />}
+          hint={activeTests.length > 0 ? `${inWork} в работе · ${inQueue} в очереди` : undefined}
         />
       </div>
 
-      {testingHypotheses.length > 0 ? (
+      {activeTests.length > 0 ? (
         <section className="mb-8 space-y-3">
-          <h2 className="font-display text-lg font-semibold flex items-center gap-2">
-            <FlaskConical className="h-5 w-5 text-success" />
-            Активные тесты
-          </h2>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {testingHypotheses.map((h) => (
-              <Link
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <h2 className="font-display text-lg font-semibold flex items-center gap-2">
+              <FlaskConical className="h-5 w-5 text-success" />
+              Активные тесты
+            </h2>
+            {inWork > 0 || inQueue > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {inWork > 0 ? `${inWork} в работе` : null}
+                {inWork > 0 && inQueue > 0 ? " · " : null}
+                {inQueue > 0 ? `${inQueue} в очереди` : null}
+              </p>
+            ) : null}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {activeTests.map(({ hypothesis: h, projectId }) => (
+              <ActiveTestCard
                 key={h.id}
-                to={`/projects/${getProjectIdByFunnel(projects, h.funnelId, projectFunnels)}/funnels/${h.funnelId}/wizard/plan`}
-              >
-                <Card className="surface hover:border-success/40 transition-all hover:shadow-glow group h-full">
-                  <CardContent className="p-4 flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium leading-snug">{h.title}</p>
-                      <p className="text-[11px] text-muted-foreground mt-1.5">
-                        Метрика: <span className="text-foreground/80">{h.metricName}</span>
-                      </p>
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
-                  </CardContent>
-                </Card>
-              </Link>
+                hypothesis={h}
+                experiment={experimentByHypothesis(h.id)}
+                href={`/projects/${projectId}/funnels/${h.funnelId}/wizard/plan`}
+              />
             ))}
           </div>
         </section>
@@ -121,22 +148,32 @@ export default function DashboardPage() {
             {projects.map((p) => {
               const funnels = projectFunnels(p.id);
               return (
-                <Link key={p.id} to={`/projects/${p.id}`} className="group">
-                  <Card className="surface h-full transition-all hover:border-primary/40 hover:shadow-glow">
-                    <CardContent className="p-5 space-y-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="font-medium leading-snug">{p.projectName}</p>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
-                      </div>
-                      <div className="flex items-center gap-2 text-[11px]">
-                        <span className="chip">воронок {funnels.length}</span>
-                      </div>
-                      <p className="text-[11px] text-muted-foreground">
-                        Обновлён {formatDate(p.updatedAt)}
-                      </p>
-                    </CardContent>
-                  </Card>
-                </Link>
+                <Card
+                  key={p.id}
+                  role="button"
+                  tabIndex={0}
+                  className="surface h-full transition-all hover:border-primary/40 hover:shadow-glow cursor-pointer"
+                  onClick={() => nav(`/projects/${p.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      nav(`/projects/${p.id}`);
+                    }
+                  }}
+                >
+                  <CardContent className="p-5 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-medium leading-snug">{p.projectName}</p>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px]">
+                      <span className="chip">воронок {funnels.length}</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Обновлён {formatDate(p.updatedAt)}
+                    </p>
+                  </CardContent>
+                </Card>
               );
             })}
           </div>
@@ -176,11 +213,13 @@ function StatChip({
   value,
   accent,
   icon,
+  hint,
 }: {
   label: string;
   value: string;
   accent?: boolean;
   icon?: React.ReactNode;
+  hint?: string;
 }) {
   return (
     <div
@@ -198,19 +237,8 @@ function StatChip({
       <div className="min-w-0">
         <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
         <p className="font-display text-lg font-bold tabular-nums leading-tight">{value}</p>
+        {hint ? <p className="text-[10px] text-muted-foreground mt-0.5">{hint}</p> : null}
       </div>
     </div>
   );
-}
-
-/** Найти projectId по funnelId, перебирая projectFunnels. */
-function getProjectIdByFunnel(
-  projects: ReturnType<typeof useAppData>["projects"],
-  funnelId: string,
-  projectFunnels: ReturnType<typeof useAppData>["projectFunnels"],
-): string {
-  for (const p of projects) {
-    if (projectFunnels(p.id).some((f) => f.id === funnelId)) return p.id;
-  }
-  return projects[0]?.id ?? "";
 }

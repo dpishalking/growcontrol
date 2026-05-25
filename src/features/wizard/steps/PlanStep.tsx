@@ -1,13 +1,28 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ChevronDown, Play, StopCircle } from "lucide-react";
+import {
+  Calendar,
+  CheckCircle2,
+  ChevronDown,
+  ClipboardList,
+  FlaskConical,
+  Loader2,
+  Play,
+  Target,
+  Trash2,
+  User,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -15,54 +30,35 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Textarea } from "@/components/ui/textarea";
 import { useAppData } from "@/context/AppDataContext";
 import { WizardLayout } from "@/features/wizard/WizardLayout";
-import { BUCKET_LABELS, sortByPriority } from "@/utils/icePriority";
+import { sortByPriority } from "@/utils/icePriority";
+import { cn } from "@/lib/utils";
 import type { Funnel } from "@/types/funnel";
 import type { Experiment, ExperimentDecision } from "@/types/experiment";
-import type { Hypothesis, HypothesisBucket } from "@/types/hypothesis";
-import { cn } from "@/lib/utils";
+import type { Hypothesis } from "@/types/hypothesis";
 
 const DECISION_OPTIONS: { value: ExperimentDecision; label: string }[] = [
   { value: "scale", label: "Масштабировать" },
   { value: "iterate", label: "Доработать" },
-  { value: "rerun", label: "Повторить тест" },
-  { value: "stop", label: "Остановить" },
+  { value: "stop", label: "Стоп" },
+  { value: "rerun", label: "Повторить" },
   { value: "archive", label: "В архив" },
 ];
 
-const BUCKET_ORDER: HypothesisBucket[] = [
-  "quick_test",
-  "strategic",
-  "uncertain",
-  "do_not_touch",
-];
-
-const BUCKET_STYLE: Record<HypothesisBucket, string> = {
-  quick_test: "border-money/40 bg-money/5",
-  strategic: "border-primary/40 bg-primary/5",
-  uncertain: "border-border/60",
-  do_not_touch: "border-border/60 opacity-80",
-};
-
-function effectPreview(thenMetric: string): string | null {
-  const t = thenMetric.trim();
-  if (!t) return null;
-  const cut = t.indexOf("(метрика:");
-  return (cut > 0 ? t.slice(0, cut) : t).trim();
+function formatShort(iso?: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
 }
 
-function statusChip(h: Hypothesis): { label: string; tone: string } | null {
-  if (h.status === "testing") return { label: "В тесте", tone: "text-primary" };
-  if (h.status === "success") return { label: "Сработало", tone: "text-success" };
-  if (h.status === "failed") return { label: "Не сработало", tone: "text-destructive" };
-  if (h.status === "backlog") return { label: "В очереди", tone: "text-muted-foreground" };
-  return null;
+function toDateInput(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString().slice(0, 10);
 }
 
 export function PlanStep({ funnel }: { funnel: Funnel }) {
@@ -70,68 +66,38 @@ export function PlanStep({ funnel }: { funnel: Funnel }) {
   const nav = useNavigate();
   const {
     funnelHypotheses,
-    funnelExperiments,
     experimentByHypothesis,
     startExperimentAction,
+    patchExperiment,
     finishExperimentAction,
+    patchHypothesis,
+    moveHypothesis,
     setFunnelStep,
   } = useAppData();
-  const hypotheses = sortByPriority(funnelHypotheses(funnel.id));
-  const experiments = funnelExperiments(funnel.id);
 
-  const buckets = useMemo(() => {
-    const map: Record<HypothesisBucket, Hypothesis[]> = {
-      quick_test: [],
-      strategic: [],
-      uncertain: [],
-      do_not_touch: [],
-    };
-    for (const h of hypotheses) map[h.bucket].push(h);
-    return map;
-  }, [hypotheses]);
+  const hypotheses = funnelHypotheses(funnel.id);
 
-  const [iceOpen, setIceOpen] = useState(false);
-  const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
-  const [finishForm, setFinishForm] = useState<
-    Record<string, { after: string; result: string; decision: ExperimentDecision }>
-  >({});
-
-  const toggleOpen = (id: string, open: boolean) => {
-    setOpenIds((prev) => {
-      const next = new Set(prev);
-      if (open) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  };
-
-  const handleStart = (hypothesisId: string) => {
-    const h = hypotheses.find((x) => x.id === hypothesisId);
-    if (!h) return;
-    startExperimentAction({
-      hypothesisId,
-      funnelId: funnel.id,
-      beforeValue: h.currentValue,
-    });
-    toast.success("Эксперимент запущен");
-  };
-
-  const handleFinish = (experimentId: string) => {
-    const form = finishForm[experimentId] ?? {
-      after: "",
-      result: "",
-      decision: "scale" as ExperimentDecision,
-    };
-    finishExperimentAction(experimentId, form.after, form.result, form.decision);
-    toast.success("Результат зафиксирован");
-  };
+  const queued = useMemo(
+    () =>
+      sortByPriority(hypotheses.filter((h) => h.status === "backlog")),
+    [hypotheses],
+  );
+  const running = useMemo(
+    () =>
+      sortByPriority(hypotheses.filter((h) => h.status === "testing")),
+    [hypotheses],
+  );
+  const done = useMemo(
+    () => hypotheses.filter((h) => h.status === "success" || h.status === "failed"),
+    [hypotheses],
+  );
 
   const handleNext = () => {
     setFunnelStep(funnel.id, 8);
     nav(`/projects/${projectId}/funnels/${funnel.id}`);
   };
 
-  const inQueue = hypotheses.filter((h) => h.status === "backlog" || h.status === "testing").length;
+  const empty = queued.length === 0 && running.length === 0;
 
   return (
     <WizardLayout
@@ -140,300 +106,582 @@ export function PlanStep({ funnel }: { funnel: Funnel }) {
       onBack={() => nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/hypotheses`)}
       onNext={handleNext}
       nextLabel="Открыть карту воронки"
-      nextDisabled={hypotheses.length === 0}
+      nextDisabled={empty && done.length === 0}
     >
-      <div className="space-y-4 max-w-2xl mx-auto">
+      <div className="space-y-6 max-w-2xl mx-auto">
         <div className="text-center space-y-1">
-          <h2 className="font-display text-lg font-semibold tracking-tight">План тестов</h2>
-          <p className="text-xs text-muted-foreground">
-            {inQueue > 0
-              ? `${inQueue} в очереди · начните с первого · детали — по раскрытию карточки`
-              : "Запускайте эксперименты сверху вниз"}
+          <h2 className="font-display text-xl font-semibold tracking-tight">План тестов</h2>
+          <p className="text-sm text-muted-foreground">
+            Сначала назначьте — потом запустите — в конце зафиксируйте результат
           </p>
         </div>
 
-        {hypotheses.length > 0 ? (
-          <Collapsible open={iceOpen} onOpenChange={setIceOpen}>
-            <div className="rounded-xl border border-border/60 overflow-hidden bg-card/20">
+        {!empty ? (
+          <div className="flex flex-wrap justify-center gap-2">
+            {queued.length > 0 ? (
+              <Badge variant="secondary" className="text-xs font-normal">
+                {queued.length} в очереди
+              </Badge>
+            ) : null}
+            {running.length > 0 ? (
+              <Badge className="text-xs font-normal bg-primary/15 text-primary border-primary/30">
+                {running.length} в работе
+              </Badge>
+            ) : null}
+          </div>
+        ) : null}
+
+        {empty ? (
+          <Card className="border-dashed border-border/60">
+            <CardContent className="py-10 text-center space-y-3">
+              <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                Нет выбранных гипотез. Вернитесь назад и отметьте 1–3 идеи.
+              </p>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/hypotheses`)
+                }
+              >
+                К гипотезам
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-6">
+            {queued.length > 0 ? (
+              <PlanGroup
+                icon={ClipboardList}
+                title="Очередь"
+                hint="Назначьте ответственного и срок — затем «Старт»"
+              >
+                {queued.map((h, i) => (
+                  <PlanCard
+                    key={h.id}
+                    index={i + 1}
+                    defaultOpen={queued.length === 1 || i === 0}
+                    hypothesis={h}
+                    experiment={experimentByHypothesis(h.id)}
+                    mode="queue"
+                    onStart={(input) => {
+                      if (
+                        input.testMethod !== h.testMethod ||
+                        input.successCriteria !== h.successCriteria
+                      ) {
+                        patchHypothesis(h.id, {
+                          testMethod: input.testMethod,
+                          successCriteria: input.successCriteria,
+                        });
+                      }
+                      startExperimentAction({
+                        hypothesisId: h.id,
+                        funnelId: funnel.id,
+                        beforeValue: h.currentValue,
+                        owner: input.owner,
+                        endDate: input.endDate,
+                      });
+                      toast.success("Тест запущен");
+                    }}
+                    onPatchExp={patchExperiment}
+                    onPatchHyp={(patch) => patchHypothesis(h.id, patch)}
+                    onRemove={() => {
+                      moveHypothesis(h.id, "draft");
+                      toast.success("Убрали из плана");
+                    }}
+                    onFinish={() => {}}
+                  />
+                ))}
+              </PlanGroup>
+            ) : null}
+
+            {running.length > 0 ? (
+              <PlanGroup
+                icon={Loader2}
+                iconSpin
+                title="В работе"
+                hint="Когда срок подошёл — внесите факт и решение"
+              >
+                {running.map((h, i) => (
+                  <PlanCard
+                    key={h.id}
+                    index={i + 1}
+                    defaultOpen={running.length === 1 || i === 0}
+                    hypothesis={h}
+                    experiment={experimentByHypothesis(h.id)}
+                    mode="running"
+                    onStart={() => {}}
+                    onPatchExp={patchExperiment}
+                    onPatchHyp={(patch) => patchHypothesis(h.id, patch)}
+                    onRemove={() => {}}
+                    onFinish={(experimentId, after, result, decision) => {
+                      finishExperimentAction(experimentId, after, result, decision);
+                      toast.success("Результат сохранён");
+                    }}
+                  />
+                ))}
+              </PlanGroup>
+            ) : null}
+          </div>
+        )}
+
+        {done.length > 0 ? (
+          <Collapsible>
+            <div className="rounded-xl border border-border/60 bg-card/20 overflow-hidden">
               <CollapsibleTrigger asChild>
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/15 transition-colors"
+                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/15 transition-colors"
                 >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">Как расставлены приоритеты (ICE)</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Impact × Confidence × Ease · порядок уже посчитан
-                    </p>
-                  </div>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
-                      iceOpen && "rotate-180",
-                    )}
-                  />
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Завершённые · {done.length}
+                  </span>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 </button>
               </CollapsibleTrigger>
-              <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down">
-                <div className="px-4 pb-4 pt-0 space-y-3 border-t border-border/40">
-                  {BUCKET_ORDER.map((b) => {
-                    const items = buckets[b];
-                    if (items.length === 0) return null;
-                    return (
-                      <Card key={b} className={cn("border", BUCKET_STYLE[b])}>
-                        <CardHeader className="pb-2 pt-3 px-3">
-                          <CardTitle className="text-sm flex items-center justify-between">
-                            <span>{BUCKET_LABELS[b].label}</span>
-                            <Badge variant="secondary" className="text-[10px]">
-                              {items.length}
-                            </Badge>
-                          </CardTitle>
-                          <p className="text-[11px] text-muted-foreground">{BUCKET_LABELS[b].hint}</p>
-                        </CardHeader>
-                        <CardContent className="px-3 pb-3 space-y-1.5">
-                          {items.map((h) => (
-                            <div
-                              key={h.id}
-                              className="rounded-lg border border-border/50 bg-background/40 px-2.5 py-2"
-                            >
-                              <p className="text-xs font-medium leading-snug break-words line-clamp-2">
-                                {h.title}
-                              </p>
-                              <p className="text-[10px] text-muted-foreground mt-0.5">
-                                ICE {h.priorityScore} · I{h.impact}/C{h.confidence}/E{h.ease}
-                              </p>
-                            </div>
-                          ))}
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
+              <CollapsibleContent>
+                <ul className="px-4 pb-3 space-y-2 border-t border-border/40 pt-3">
+                  {done.map((h) => (
+                    <li
+                      key={h.id}
+                      className="flex justify-between items-center gap-2 text-xs py-1"
+                    >
+                      <span className="line-clamp-1 min-w-0">{h.title}</span>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "shrink-0 text-[10px]",
+                          h.status === "success"
+                            ? "border-success/40 text-success"
+                            : "border-destructive/40 text-destructive",
+                        )}
+                      >
+                        {h.status === "success" ? "✓" : "✗"}
+                      </Badge>
+                    </li>
+                  ))}
+                </ul>
               </CollapsibleContent>
             </div>
           </Collapsible>
-        ) : null}
-
-        {hypotheses.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8">Гипотез ещё нет.</p>
-        ) : (
-          <>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium text-center">
-              Очередь запуска
-            </p>
-            <ul className="space-y-2">
-              {hypotheses.map((h, i) => {
-                const exp = experimentByHypothesis(h.id);
-                const form = finishForm[exp?.id ?? ""] ?? {
-                  after: "",
-                  result: "",
-                  decision: "scale" as ExperimentDecision,
-                };
-                const preview = effectPreview(h.thenMetric);
-                const chip = statusChip(h);
-
-                return (
-                  <li key={h.id}>
-                    <PlanHypothesisCard
-                      index={i + 1}
-                      hypothesis={h}
-                      preview={preview}
-                      chip={chip}
-                      open={openIds.has(h.id)}
-                      onOpenChange={(open) => toggleOpen(h.id, open)}
-                      experiment={exp}
-                      finishForm={form}
-                      onFinishFormChange={(patch) =>
-                        exp &&
-                        setFinishForm((s) => ({
-                          ...s,
-                          [exp.id]: { ...form, ...patch },
-                        }))
-                      }
-                      onStart={() => handleStart(h.id)}
-                      onFinish={() => exp && handleFinish(exp.id)}
-                    />
-                  </li>
-                );
-              })}
-            </ul>
-          </>
-        )}
-
-        {experiments.filter((e) => e.decision !== "pending").length > 0 ? (
-          <Card className="border-border/60">
-            <CardContent className="p-4 space-y-2">
-              <p className="text-xs font-medium text-center text-muted-foreground">Завершённые</p>
-              {experiments
-                .filter((e) => e.decision !== "pending")
-                .map((e) => {
-                  const h = hypotheses.find((x) => x.id === e.hypothesisId);
-                  return (
-                    <div
-                      key={e.id}
-                      className="flex items-center justify-between gap-2 text-xs border-t border-border/40 pt-2 first:border-0 first:pt-0"
-                    >
-                      <span className="line-clamp-1 min-w-0">{h?.title ?? e.hypothesisId}</span>
-                      <span className="shrink-0 text-muted-foreground">
-                        {DECISION_OPTIONS.find((d) => d.value === e.decision)?.label}
-                      </span>
-                    </div>
-                  );
-                })}
-            </CardContent>
-          </Card>
         ) : null}
       </div>
     </WizardLayout>
   );
 }
 
-function PlanHypothesisCard({
+function PlanGroup({
+  icon: Icon,
+  iconSpin,
+  title,
+  hint,
+  children,
+}: {
+  icon: typeof ClipboardList;
+  iconSpin?: boolean;
+  title: string;
+  hint: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="flex items-start gap-2 px-1">
+        <Icon
+          className={cn(
+            "h-4 w-4 text-primary mt-0.5 shrink-0",
+            iconSpin && "animate-spin",
+          )}
+        />
+        <div>
+          <h3 className="text-sm font-medium">{title}</h3>
+          <p className="text-xs text-muted-foreground">{hint}</p>
+        </div>
+      </div>
+      <ul className="space-y-3">{children}</ul>
+    </section>
+  );
+}
+
+function PlanSection({
+  step,
+  title,
+  children,
+  className,
+}: {
+  step?: number;
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("rounded-lg bg-muted/20 border border-border/40 p-3 space-y-2.5", className)}>
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
+        {step != null ? (
+          <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-muted text-[9px] tabular-nums">
+            {step}
+          </span>
+        ) : null}
+        {title}
+      </p>
+      {children}
+    </div>
+  );
+}
+
+type StartPayload = {
+  owner: string;
+  endDate: string | null;
+  testMethod: string;
+  successCriteria: string;
+};
+
+function SetupRow({ label, value }: { label: string; value: string }) {
+  if (!value?.trim()) return null;
+  return (
+    <div className="grid grid-cols-[5.5rem_1fr] gap-2 text-xs">
+      <span className="text-muted-foreground shrink-0">{label}</span>
+      <span className="text-foreground/90 leading-relaxed break-words">{value}</span>
+    </div>
+  );
+}
+
+function PlanCard({
   index,
+  defaultOpen = true,
   hypothesis: h,
-  preview,
-  chip,
-  open,
-  onOpenChange,
   experiment: exp,
-  finishForm: form,
-  onFinishFormChange,
+  mode,
   onStart,
+  onPatchExp,
+  onPatchHyp,
+  onRemove,
   onFinish,
 }: {
   index: number;
+  defaultOpen?: boolean;
   hypothesis: Hypothesis;
-  preview: string | null;
-  chip: { label: string; tone: string } | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  experiment: Experiment | undefined;
-  finishForm: { after: string; result: string; decision: ExperimentDecision };
-  onFinishFormChange: (patch: Partial<{ after: string; result: string; decision: ExperimentDecision }>) => void;
-  onStart: () => void;
-  onFinish: () => void;
+  experiment: Experiment | null;
+  mode: "queue" | "running";
+  onStart: (input: StartPayload) => void;
+  onPatchExp: (id: string, patch: Partial<Experiment>) => void;
+  onPatchHyp: (patch: Partial<Hypothesis>) => void;
+  onRemove: () => void;
+  onFinish: (
+    experimentId: string,
+    after: string,
+    result: string,
+    decision: ExperimentDecision,
+  ) => void;
 }) {
+  const defaultEnd = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + (h.testDurationDays || 7));
+    return d.toISOString().slice(0, 10);
+  }, [h.testDurationDays]);
+
+  const [cardOpen, setCardOpen] = useState(defaultOpen);
+  const [methodOpen, setMethodOpen] = useState(false);
+  const [owner, setOwner] = useState(exp?.owner ?? "");
+  const [endDate, setEndDate] = useState(toDateInput(exp?.endDate) || defaultEnd);
+  const [method, setMethod] = useState(h.testMethod);
+  const [success, setSuccess] = useState(h.successCriteria);
+
+  const [after, setAfter] = useState(exp?.afterValue ?? "");
+  const [resultNote, setResultNote] = useState(exp?.result ?? "");
+  const [decision, setDecision] = useState<ExperimentDecision>(
+    exp?.decision && exp.decision !== "pending" ? exp.decision : "scale",
+  );
+
+  useEffect(() => {
+    if (!exp) return;
+    setOwner(exp.owner ?? "");
+    setEndDate(toDateInput(exp.endDate) || defaultEnd);
+    setAfter(exp.afterValue ?? "");
+    setResultNote(exp.result ?? "");
+    if (exp.decision && exp.decision !== "pending") setDecision(exp.decision);
+  }, [exp, defaultEnd]);
+
+  useEffect(() => {
+    setMethod(h.testMethod);
+    setSuccess(h.successCriteria);
+  }, [h.testMethod, h.successCriteria]);
+
+  const handleStart = () => {
+    if (!owner.trim()) {
+      toast.error("Укажите ответственного");
+      return;
+    }
+    onStart({
+      owner: owner.trim(),
+      endDate: endDate ? new Date(endDate).toISOString() : null,
+      testMethod: method,
+      successCriteria: success,
+    });
+  };
+
+  const handleFinish = () => {
+    if (!exp) return;
+    if (!after.trim()) {
+      toast.error("Укажите факт");
+      return;
+    }
+    onFinish(exp.id, after.trim(), resultNote.trim(), decision);
+  };
+
   return (
-    <Collapsible open={open} onOpenChange={onOpenChange}>
-      <div className="rounded-xl border border-border/60 overflow-hidden bg-card/25">
+    <li
+      className={cn(
+        "rounded-xl border bg-card/25 overflow-hidden",
+        mode === "running"
+          ? "border-primary/45 shadow-glow ring-1 ring-primary/20"
+          : "border-border/60",
+      )}
+    >
+      <Collapsible open={cardOpen} onOpenChange={setCardOpen}>
         <CollapsibleTrigger asChild>
           <button
             type="button"
-            className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-muted/15 transition-colors"
+            className={cn(
+              "w-full text-left px-4 py-3 transition-colors hover:bg-muted/10",
+              cardOpen ? "border-b border-border/40" : "",
+              mode === "running" ? "bg-primary/5" : "bg-muted/10",
+            )}
           >
-            <span className="text-[10px] tabular-nums text-muted-foreground pt-0.5 w-4 shrink-0">
-              {index}
-            </span>
-            <div className="min-w-0 flex-1 space-y-1">
-              <p className="text-sm font-medium leading-snug line-clamp-2">{h.title}</p>
-              {preview && !open ? (
-                <p className="text-xs text-muted-foreground line-clamp-1">→ {preview}</p>
-              ) : null}
-              {chip ? (
-                <p className="text-[11px]">
-                  <span className={chip.tone}>{chip.label}</span>
-                </p>
-              ) : null}
+            <div className="flex items-start gap-2.5">
+              <span className="text-[10px] tabular-nums text-muted-foreground pt-1 w-4 shrink-0">
+                {index}
+              </span>
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <div className="flex items-start justify-between gap-2">
+                  <p
+                    className={cn(
+                      "text-sm font-medium leading-relaxed break-words",
+                      !cardOpen && "line-clamp-2",
+                    )}
+                  >
+                    {h.title}
+                  </p>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {mode === "running" ? (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] gap-1 border-primary/40 bg-primary/10 text-primary"
+                      >
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        В работе
+                      </Badge>
+                    ) : null}
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 text-muted-foreground transition-transform",
+                        cardOpen && "rotate-180",
+                      )}
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge variant="outline" className="text-[10px] font-normal gap-1">
+                    <Target className="h-2.5 w-2.5" />
+                    {h.metricName}
+                  </Badge>
+                  {!cardOpen && mode === "running" && exp ? (
+                    <>
+                      <Badge variant="secondary" className="text-[10px] font-normal gap-1">
+                        <User className="h-2.5 w-2.5" />
+                        {exp.owner || "—"}
+                      </Badge>
+                      <Badge variant="secondary" className="text-[10px] font-normal gap-1">
+                        <Calendar className="h-2.5 w-2.5" />
+                        до {formatShort(exp.endDate)}
+                      </Badge>
+                    </>
+                  ) : null}
+                  {!cardOpen && mode === "queue" && owner ? (
+                    <Badge variant="secondary" className="text-[10px] font-normal gap-1">
+                      <User className="h-2.5 w-2.5" />
+                      {owner}
+                    </Badge>
+                  ) : null}
+                </div>
+              </div>
             </div>
-            <ChevronDown
-              className={cn(
-                "h-4 w-4 shrink-0 text-muted-foreground transition-transform mt-0.5",
-                open && "rotate-180",
-              )}
-            />
           </button>
         </CollapsibleTrigger>
 
         <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down">
-          <div className="px-4 pb-4 pt-0 space-y-3 border-t border-border/40">
-            <DetailBlock title="Что тестируем">
-              <DetailRow label="Если" value={h.ifChange} />
-              <DetailRow label="То" value={h.thenMetric} />
-              <DetailRow label="Метрика" value={`${h.metricName} · цель ${h.targetValue || "—"}`} />
-            </DetailBlock>
-
-            <DetailBlock title="Как проверяем">
-              <DetailRow label="Метод" value={h.testMethod} />
-              <DetailRow label="Успех" value={h.successCriteria} />
-              <DetailRow label="Срок" value={`${h.testDurationDays} дн.`} />
-            </DetailBlock>
-
-            {exp ? (
-              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-3">
-                <p className="text-xs font-medium">Эксперимент идёт</p>
-                <p className="text-xs text-muted-foreground">
-                  Было: <span className="text-foreground font-medium">{exp.beforeValue || "—"}</span>
-                </p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Стало (факт)</Label>
+          <div className="px-4 py-3 space-y-3">
+        {mode === "queue" ? (
+          <>
+            <PlanSection step={1} title="Кто и когда">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Ответственный</Label>
+                  <div className="relative">
+                    <User className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                     <Input
-                      value={form.after}
-                      onChange={(e) => onFinishFormChange({ after: e.target.value })}
+                      className="pl-8 h-9"
+                      value={owner}
+                      onChange={(e) => setOwner(e.target.value)}
+                      placeholder="Имя"
                     />
-                  </div>
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs">Вывод</Label>
-                    <Textarea
-                      rows={2}
-                      value={form.result}
-                      onChange={(e) => onFinishFormChange({ result: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Решение</Label>
-                    <Select
-                      value={form.decision}
-                      onValueChange={(v) =>
-                        onFinishFormChange({ decision: v as ExperimentDecision })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {DECISION_OPTIONS.map((o) => (
-                          <SelectItem key={o.value} value={o.value}>
-                            {o.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                   </div>
                 </div>
-                <Button size="sm" onClick={onFinish}>
-                  <StopCircle className="mr-1.5 h-4 w-4" />
-                  Зафиксировать
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Срок</Label>
+                  <div className="relative">
+                    <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                    <Input
+                      className="pl-8 h-9"
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            </PlanSection>
+
+            <Collapsible open={methodOpen} onOpenChange={setMethodOpen}>
+              <PlanSection step={2} title="Как проверяем">
+                {!methodOpen && method ? (
+                  <p className="text-xs text-muted-foreground leading-relaxed break-words">{method}</p>
+                ) : null}
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="text-[11px] text-primary/80 hover:text-primary flex items-center gap-1"
+                  >
+                    <ChevronDown
+                      className={cn("h-3 w-3 transition-transform", methodOpen && "rotate-180")}
+                    />
+                    {methodOpen ? "Свернуть" : "Изменить метод и критерий"}
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-2 pt-1">
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-muted-foreground">Метод</Label>
+                    <Input
+                      className="h-9 text-sm"
+                      value={method}
+                      onChange={(e) => setMethod(e.target.value)}
+                      onBlur={() => {
+                        if (method !== h.testMethod) onPatchHyp({ testMethod: method });
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-muted-foreground">Успех =</Label>
+                    <Input
+                      className="h-9 text-sm"
+                      value={success}
+                      onChange={(e) => setSuccess(e.target.value)}
+                      onBlur={() => {
+                        if (success !== h.successCriteria) onPatchHyp({ successCriteria: success });
+                      }}
+                    />
+                  </div>
+                </CollapsibleContent>
+              </PlanSection>
+            </Collapsible>
+
+            <div className="flex justify-between items-center pt-1 gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onRemove}
+                className="text-muted-foreground h-8 px-2"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+              <Button size="sm" className="h-9" onClick={handleStart}>
+                <Play className="mr-1.5 h-3.5 w-3.5" />
+                Старт
+              </Button>
+            </div>
+          </>
+        ) : exp ? (
+          <>
+            <PlanSection step={1} title="Вводные">
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-2 pb-1">
+                  <Badge variant="secondary" className="text-[10px] font-normal gap-1">
+                    <User className="h-2.5 w-2.5" />
+                    {exp.owner || "Без ответственного"}
+                  </Badge>
+                  <Badge variant="secondary" className="text-[10px] font-normal gap-1">
+                    <Calendar className="h-2.5 w-2.5" />
+                    до {formatShort(exp.endDate)}
+                  </Badge>
+                  {exp.startDate ? (
+                    <Badge variant="secondary" className="text-[10px] font-normal gap-1">
+                      <FlaskConical className="h-2.5 w-2.5" />
+                      с {formatShort(exp.startDate)}
+                    </Badge>
+                  ) : null}
+                </div>
+                <SetupRow label="Если" value={h.ifChange} />
+                <SetupRow label="То" value={h.thenMetric} />
+                <SetupRow label="Метод" value={h.testMethod} />
+                <SetupRow label="Успех" value={h.successCriteria} />
+                {exp.beforeValue ? (
+                  <SetupRow label="Было" value={exp.beforeValue} />
+                ) : h.currentValue ? (
+                  <SetupRow label="Было" value={h.currentValue} />
+                ) : null}
+              </div>
+            </PlanSection>
+
+            <PlanSection step={2} title="Результат" className="border-primary/25 bg-primary/5">
+              <div className="space-y-1">
+                <Label className="text-[11px] text-muted-foreground">Факт</Label>
+                <Input
+                  className="h-9"
+                  value={after}
+                  onChange={(e) => setAfter(e.target.value)}
+                  placeholder="Было 20% → стало 28%"
+                />
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Решение</Label>
+                  <Select
+                    value={decision}
+                    onValueChange={(v) => setDecision(v as ExperimentDecision)}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DECISION_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1 sm:col-span-2">
+                  <Label className="text-[11px] text-muted-foreground">Вывод (необязательно)</Label>
+                  <Textarea
+                    rows={2}
+                    className="text-sm resize-none"
+                    value={resultNote}
+                    onChange={(e) => setResultNote(e.target.value)}
+                    placeholder="Что узнали"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end pt-1">
+                <Button size="sm" className="h-9" onClick={handleFinish}>
+                  <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                  Готово
                 </Button>
               </div>
-            ) : (
-              <Button size="sm" className="w-full sm:w-auto" onClick={onStart}>
-                <Play className="mr-1.5 h-4 w-4" />
-                Запустить эксперимент
-              </Button>
-            )}
+            </PlanSection>
+          </>
+        ) : null}
           </div>
         </CollapsibleContent>
-      </div>
-    </Collapsible>
-  );
-}
-
-function DetailBlock({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <div className="space-y-1.5 pt-3 first:pt-3">
-      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{title}</p>
-      <div className="rounded-lg bg-muted/15 px-3 py-2 space-y-1.5">{children}</div>
-    </div>
-  );
-}
-
-function DetailRow({ label, value }: { label: string; value: string }) {
-  if (!value?.trim()) return null;
-  return (
-    <div className="grid gap-0.5 sm:grid-cols-[4.5rem_1fr] sm:gap-2 text-xs">
-      <span className="text-muted-foreground shrink-0">{label}</span>
-      <span className="leading-relaxed break-words text-foreground/90">{value}</span>
-    </div>
+      </Collapsible>
+    </li>
   );
 }

@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { CreditCard, LayoutDashboard, LogOut, Shield, Sparkles, User as UserIcon } from "lucide-react";
+import { CreditCard, LayoutDashboard, LogOut, Shield, User as UserIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppData } from "@/context/AppDataContext";
 import { useAuth } from "@/hooks/useAuth";
@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { isAdminUser } from "@/lib/admin/access";
+import { AppBrand } from "@/components/layout/AppBrand";
 
 const NAV = [
   { to: "/dashboard", label: "Проекты", icon: LayoutDashboard },
@@ -42,12 +43,9 @@ export function AppLayout() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4">
-          <Link to="/dashboard" className="flex items-center gap-2 font-display font-semibold text-foreground">
-            <span className="h-7 w-7 rounded-lg bg-gradient-money flex items-center justify-center text-primary-foreground">
-              <Sparkles className="h-3.5 w-3.5" />
-            </span>
-            <span className="tracking-tight">GrowControl</span>
+        <div className="mx-auto flex h-[3.75rem] max-w-6xl items-center justify-between gap-3 px-4">
+          <Link to="/dashboard" className="min-w-0">
+            <AppBrand />
           </Link>
 
           <nav className="hidden sm:flex items-center gap-1">
