@@ -44,6 +44,14 @@ jobs:
           dangerous-clean-slate: true
           log-level: verbose
 
+      - name: Fix remote file permissions (Timeweb nginx 403)
+        env:
+          TIMEWEB_FTP_HOST: ${{ secrets.TIMEWEB_FTP_HOST }}
+          TIMEWEB_FTP_USER: ${{ secrets.TIMEWEB_FTP_USER }}
+          TIMEWEB_FTP_PASSWORD: ${{ secrets.TIMEWEB_FTP_PASSWORD }}
+          TIMEWEB_FTP_SERVER_DIR: ${{ secrets.TIMEWEB_FTP_SERVER_DIR }}
+        run: node scripts/ftp-fix-permissions.mjs
+
       - name: Verify live site updated
         run: |
           sleep 15
@@ -51,6 +59,18 @@ jobs:
           echo "Expected: $EXPECTED_ASSET"
           echo "Remote:   $REMOTE"
           if [ "$REMOTE" != "$EXPECTED_ASSET" ]; then
-            echo "::error::Production still serves old bundle. Check TIMEWEB_FTP_SERVER_DIR (expected /domains/controlgrow.ru/public_html/)."
+            echo "::error::Production still serves old bundle. Check TIMEWEB_FTP_SERVER_DIR (expected /controlgrow.ru/public_html/)."
             exit 1
           fi
+          for path in /auth/ /dashboard/ /admin/; do
+            code=$(curl -s -o /tmp/spa-check.html -w "%{http_code}" "https://controlgrow.ru${path}")
+            echo "${path} → HTTP ${code}"
+            if [ "$code" != "200" ]; then
+              echo "::error::SPA route ${path} returned ${code} (expected 200). Check auth/index.html permissions."
+              exit 1
+            fi
+            grep -q 'id="root"' /tmp/spa-check.html || {
+              echo "::error::SPA route ${path} did not return index.html"
+              exit 1
+            }
+          done
