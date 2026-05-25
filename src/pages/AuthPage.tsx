@@ -5,6 +5,7 @@ import { ArrowRight, Loader2, Mail, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { resolveAuthEmail, validateLogin } from "@/lib/authLogin";
 import { useAuth } from "@/hooks/useAuth";
 
 type Mode = "login" | "signup" | "magic";
@@ -53,15 +54,24 @@ export default function AuthPage() {
     }
 
     if (!email.trim() || password.length < 6) {
-      toast.error("E-mail и пароль (от 6 символов) обязательны");
+      toast.error("Логин и пароль (от 6 символов) обязательны");
       return;
+    }
+
+    const authEmail = email.includes("@") ? email.trim().toLowerCase() : resolveAuthEmail(email);
+    if (!email.includes("@")) {
+      const loginError = validateLogin(email);
+      if (loginError) {
+        toast.error(loginError);
+        return;
+      }
     }
 
     setBusy(true);
     const result =
       mode === "signup"
-        ? await signUp(email.trim(), password, name.trim() || undefined)
-        : await signIn(email.trim(), password);
+        ? await signUp(authEmail, password, name.trim() || undefined)
+        : await signIn(authEmail, password);
     setBusy(false);
 
     if (result.error) {
@@ -142,7 +152,7 @@ export default function AuthPage() {
                 ? "Бесплатно. Без карты."
                 : mode === "magic"
                   ? "Отправим письмо с одноразовой ссылкой"
-                  : "Введите e-mail и пароль"}
+                  : "Введите логин и пароль"}
             </p>
           </div>
 
@@ -155,13 +165,13 @@ export default function AuthPage() {
             )}
 
             <div className="space-y-1.5">
-              <Label className="text-xs">E-mail</Label>
+              <Label className="text-xs">{mode === "magic" ? "E-mail" : "Логин"}</Label>
               <Input
-                type="email"
+                type={mode === "magic" ? "email" : "text"}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                autoComplete="email"
+                placeholder={mode === "magic" ? "you@example.com" : "ivan_petrov"}
+                autoComplete={mode === "magic" ? "email" : "username"}
                 required
               />
             </div>

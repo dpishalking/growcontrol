@@ -12,8 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { createUserByAdmin, generateTempPassword, inviteUserByEmail } from "@/lib/admin/createUser";
+import { createUserByAdmin, generateTempPassword } from "@/lib/admin/createUser";
 
 type Props = {
   open?: boolean;
@@ -24,9 +23,8 @@ type Props = {
 
 export function AddParticipantDialog({ open, onOpenChange, onSuccess, trigger }: Props) {
   const [internalOpen, setInternalOpen] = useState(false);
-  const [mode, setMode] = useState<"create" | "invite">("create");
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -35,9 +33,8 @@ export function AddParticipantDialog({ open, onOpenChange, onSuccess, trigger }:
 
   const resetForm = () => {
     setName("");
-    setEmail("");
+    setLogin("");
     setPassword("");
-    setMode("create");
   };
 
   const setDialogOpen = (next: boolean) => {
@@ -46,42 +43,23 @@ export function AddParticipantDialog({ open, onOpenChange, onSuccess, trigger }:
     if (!next) resetForm();
   };
 
-  const finishSuccess = (message: string) => {
-    toast.success(message);
+  const handleCreate = async () => {
+    const nextLogin = login.trim();
+    if (!nextLogin || password.length < 6) {
+      toast.error("Укажите логин и пароль (минимум 6 символов)");
+      return;
+    }
+    setSubmitting(true);
+    const result = await createUserByAdmin({ login: nextLogin, password, name });
+    setSubmitting(false);
+    if ("error" in result) {
+      toast.error(result.error);
+      return;
+    }
+    const createdLogin = result.login ?? nextLogin.toLowerCase();
+    toast.success(`Участник «${createdLogin}» создан`);
     setDialogOpen(false);
     onSuccess?.();
-  };
-
-  const handleCreate = async () => {
-    const nextEmail = email.trim().toLowerCase();
-    if (!nextEmail || password.length < 6) {
-      toast.error("Укажите e-mail и пароль (минимум 6 символов)");
-      return;
-    }
-    setSubmitting(true);
-    const result = await createUserByAdmin({ email: nextEmail, password, name });
-    setSubmitting(false);
-    if ("error" in result) {
-      toast.error(result.error);
-      return;
-    }
-    finishSuccess(`Участник ${nextEmail} создан. Передайте ему пароль для входа.`);
-  };
-
-  const handleInvite = async () => {
-    const nextEmail = email.trim().toLowerCase();
-    if (!nextEmail) {
-      toast.error("Укажите e-mail");
-      return;
-    }
-    setSubmitting(true);
-    const result = await inviteUserByEmail(nextEmail, name);
-    setSubmitting(false);
-    if ("error" in result) {
-      toast.error(result.error);
-      return;
-    }
-    finishSuccess(`Приглашение отправлено на ${nextEmail}. Участник появится в списке.`);
   };
 
   return (
@@ -92,79 +70,64 @@ export function AddParticipantDialog({ open, onOpenChange, onSuccess, trigger }:
           <DialogTitle>Добавить участника</DialogTitle>
         </DialogHeader>
 
-        <Tabs value={mode} onValueChange={(v) => setMode(v as "create" | "invite")}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="create">Создать аккаунт</TabsTrigger>
-            <TabsTrigger value="invite">Пригласить</TabsTrigger>
-          </TabsList>
-
-          <div className="space-y-3 pt-3">
-            <div className="space-y-2">
-              <Label htmlFor="participant-name">Имя</Label>
-              <Input
-                id="participant-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Иван"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="participant-email">E-mail</Label>
-              <Input
-                id="participant-email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="client@example.com"
-              />
-            </div>
-
-            <TabsContent value="create" className="mt-0 space-y-2">
-              <Label htmlFor="participant-password">Пароль</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="participant-password"
-                  type="text"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="минимум 6 символов"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  title="Сгенерировать пароль"
-                  onClick={() => setPassword(generateTempPassword())}
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Аккаунт создаётся сразу. Передайте участнику e-mail и пароль для входа на /auth.
-              </p>
-            </TabsContent>
-
-            <TabsContent value="invite" className="mt-0">
-              <p className="text-xs text-muted-foreground">
-                На почту уйдёт письмо со ссылкой — участник сам задаст пароль при первом входе.
-              </p>
-            </TabsContent>
+        <div className="space-y-3 pt-1">
+          <div className="space-y-2">
+            <Label htmlFor="participant-login">Логин</Label>
+            <Input
+              id="participant-login"
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
+              placeholder="ivan_petrov"
+              autoComplete="off"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Латиница, цифры, точка, _ или -. От 3 символов.
+            </p>
           </div>
-        </Tabs>
+
+          <div className="space-y-2">
+            <Label htmlFor="participant-name">Имя (необязательно)</Label>
+            <Input
+              id="participant-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Иван"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="participant-password">Пароль</Label>
+            <div className="flex gap-2">
+              <Input
+                id="participant-password"
+                type="text"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="минимум 6 символов"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                title="Сгенерировать пароль"
+                onClick={() => setPassword(generateTempPassword())}
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Передайте участнику логин и пароль для входа на /auth.
+            </p>
+          </div>
+        </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => setDialogOpen(false)}>
             Отмена
           </Button>
-          {mode === "create" ? (
-            <Button onClick={handleCreate} disabled={submitting || !email.trim() || password.length < 6}>
-              {submitting ? "Создание…" : "Создать"}
-            </Button>
-          ) : (
-            <Button onClick={handleInvite} disabled={submitting || !email.trim()}>
-              {submitting ? "Отправка…" : "Отправить приглашение"}
-            </Button>
-          )}
+          <Button onClick={handleCreate} disabled={submitting || !login.trim() || password.length < 6}>
+            {submitting ? "Создание…" : "Создать"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

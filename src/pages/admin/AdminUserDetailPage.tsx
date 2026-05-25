@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { profileIdentifier } from "@/lib/authLogin";
 import { formatDate } from "@/utils/format";
 
 type Profile = {
@@ -121,12 +122,18 @@ export default function AdminUserDetailPage() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">{profile.display_name || profile.email || "Участник"}</CardTitle>
+          <CardTitle className="text-base">{profile.display_name || profileIdentifier(profile)}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-2 text-sm sm:grid-cols-2">
           <div>
+            <span className="text-muted-foreground">Логин: </span>
+            {profileIdentifier(profile)}
+          </div>
+          <div>
             <span className="text-muted-foreground">E-mail: </span>
-            {profile.email || "—"}
+            {profile.email && !profile.email.includes("@login.controlgrow.ru")
+              ? profile.email
+              : "—"}
           </div>
           <div>
             <span className="text-muted-foreground">Регистрация: </span>

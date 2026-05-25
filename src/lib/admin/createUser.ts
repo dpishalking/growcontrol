@@ -1,3 +1,4 @@
+import { validateLogin } from "@/lib/authLogin";
 import { supabase } from "@/integrations/supabase/client";
 
 function parseFnError(error: unknown, data: unknown): string | null {
@@ -22,10 +23,12 @@ function parseFnError(error: unknown, data: unknown): string | null {
 export function humanizeAdminUserError(msg: string): string {
   const m = msg.toLowerCase();
   if (m.includes("already been registered") || m.includes("already exists")) {
-    return "Пользователь с таким e-mail уже есть";
+    return "Такой логин уже занят";
   }
+  if (m.includes("invalid login")) return "Некорректный логин";
   if (m.includes("invalid email")) return "Некорректный e-mail";
   if (m.includes("password must be at least")) return "Пароль минимум 6 символов";
+  if (m.includes("login must be at least")) return "Логин минимум 3 символа";
   if (m.includes("forbidden")) return "Нет прав администратора";
   if (m.includes("unauthorized")) return "Войдите в аккаунт администратора";
   if (m.includes("edge function") || m.includes("failed to send")) {
@@ -35,7 +38,7 @@ export function humanizeAdminUserError(msg: string): string {
 }
 
 export type AdminUserActionResult =
-  | { ok: true; userId: string | null }
+  | { ok: true; userId: string | null; login?: string | null }
   | { error: string };
 
 export async function inviteUserByEmail(
@@ -62,13 +65,16 @@ export async function inviteUserByEmail(
 }
 
 export async function createUserByAdmin(input: {
-  email: string;
+  login: string;
   password: string;
   name?: string;
 }): Promise<AdminUserActionResult> {
+  const loginError = validateLogin(input.login);
+  if (loginError) return { error: loginError };
+
   const { data, error } = await supabase.functions.invoke("admin-create-user", {
     body: {
-      email: input.email.trim().toLowerCase(),
+      login: input.login.trim(),
       password: input.password,
       name: input.name?.trim() || undefined,
     },
@@ -81,8 +87,12 @@ export async function createUserByAdmin(input: {
     data && typeof data === "object" && "userId" in data
       ? (data.userId as string | null)
       : null;
+  const login =
+    data && typeof data === "object" && "login" in data
+      ? (data.login as string | null)
+      : input.login.trim().toLowerCase();
 
-  return { ok: true, userId };
+  return { ok: true, userId, login };
 }
 
 export function generateTempPassword(length = 10): string {

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useAdminShell } from "@/components/admin/AdminShellContext";
 import { fetchAdminProfiles, type AdminProfile } from "@/lib/admin/fetchProfiles";
+import { profileIdentifier } from "@/lib/authLogin";
 import { formatDate } from "@/utils/format";
 
 export default function AdminUsersPage() {
@@ -47,7 +48,7 @@ export default function AdminUsersPage() {
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Поиск по e-mail или имени"
+            placeholder="Поиск по логину или имени"
             className="pl-9"
           />
         </div>
@@ -70,8 +71,8 @@ export default function AdminUsersPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border/60 text-xs uppercase tracking-wider text-muted-foreground">
+                    <th className="text-left py-3 px-4 font-medium">Логин</th>
                     <th className="text-left py-3 px-4 font-medium">Имя</th>
-                    <th className="text-left py-3 px-4 font-medium">E-mail</th>
                     <th className="text-right py-3 px-4 font-medium">Создан</th>
                     <th className="text-right py-3 px-4 font-medium">Кабинет</th>
                   </tr>
@@ -80,10 +81,10 @@ export default function AdminUsersPage() {
                   {filtered.map((p) => (
                     <tr key={p.user_id} className="border-b border-border/30 last:border-0 hover:bg-secondary/30 transition-colors">
                       <td className="py-2.5 px-4 font-medium truncate max-w-[200px]">
-                        {p.display_name || "—"}
+                        {profileIdentifier(p)}
                       </td>
                       <td className="py-2.5 px-4 text-muted-foreground truncate max-w-[260px]">
-                        {p.email || "—"}
+                        {p.display_name && p.display_name !== profileIdentifier(p) ? p.display_name : "—"}
                       </td>
                       <td className="py-2.5 px-4 text-right text-xs text-muted-foreground tabular-nums">
                         {formatDate(p.created_at)}
