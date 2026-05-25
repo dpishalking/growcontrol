@@ -65,6 +65,7 @@ import {
   createHypothesis,
   generateHypothesesForFunnel,
   generateHypothesesForMetric,
+  generateAiHypothesesForMetric,
   getHypothesesByFunnel,
   getHypothesisById,
   getTestingHypotheses,
@@ -117,7 +118,7 @@ import type {
 import type { FunnelStageDefinition, FunnelTypeId } from "@/types/funnelType";
 import { loadStore, saveStore, setStorageScope, type MockStore } from "@/services/storage";
 import { useAuth } from "@/hooks/useAuth";
-import { logProjectActivity, syncProjectToRemote } from "@/services/projectSyncService";
+import { logProjectActivity, resolveProjectIdForFunnel, syncProjectToRemote } from "@/services/projectSyncService";
 
 type AppDataContextValue = {
   store: MockStore;
@@ -195,6 +196,10 @@ type AppDataContextValue = {
   deleteHypothesis: (id: string) => boolean;
   generateHypothesesForFunnelAction: (funnelId: string) => Hypothesis[];
   generateHypothesesForMetricAction: (metric: FunnelMetric) => Hypothesis[];
+  generateAiHypothesesForMetricAction: (
+    funnelId: string,
+    metric: FunnelMetric,
+  ) => Promise<Hypothesis[]>;
   importAuditHypothesesForMetric: (funnelId: string, metric: FunnelMetric) => Hypothesis[];
   finalizeHypothesisSelectionAction: (
     funnelId: string,
@@ -281,6 +286,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       });
     },
     [scopeUserId, guest],
+  );
+
+  const syncProjectForFunnel = useCallback(
+    (funnelId: string, currentStore: MockStore) => {
+      if (!scopeUserId || guest) return;
+      const projectId = resolveProjectIdForFunnel(currentStore, funnelId);
+      if (!projectId) return;
+      const project = getProjectById(currentStore, projectId);
+      if (project) syncProject(project, currentStore);
+    },
+    [scopeUserId, guest, syncProject],
   );
 
   const refresh = useCallback(() => {
@@ -470,13 +486,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         const drafts = f?.auditSnapshot?.report.hypotheses ?? [];
         if (!drafts.length) return [];
         const created = importHypothesesFromAudit(store, funnelId, drafts);
-        if (created.length) persist(store);
+        if (created.length) {
+          persist(store);
+          syncProjectForFunnel(funnelId, store);
+        }
         return created;
       },
       importAuditHypothesesDrafts: (funnelId, drafts) => {
         if (!drafts.length) return [];
         const created = importHypothesesFromAudit(store, funnelId, drafts);
-        if (created.length) persist(store);
+        if (created.length) {
+          persist(store);
+          syncProjectForFunnel(funnelId, store);
+        }
         return created;
       },
 
@@ -508,41 +530,72 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       addHypothesis: (input) => {
         const h = createHypothesis(store, input);
         persist(store);
+        syncProjectForFunnel(input.funnelId, store);
         return h;
       },
       patchHypothesis: (id, patch) => {
+        const before = getHypothesisById(store, id);
         const h = updateHypothesis(store, id, patch);
-        if (h) persist(store);
+        if (h) {
+          persist(store);
+          syncProjectForFunnel(h.funnelId ?? before?.funnelId ?? "", store);
+        }
         return h;
       },
       moveHypothesis: (id, status, result) => {
+        const before = getHypothesisById(store, id);
         const h = moveHypothesisStatus(store, id, status, result);
-        if (h) persist(store);
+        if (h) {
+          persist(store);
+          syncProjectForFunnel(h.funnelId ?? before?.funnelId ?? "", store);
+        }
         return h;
       },
       deleteHypothesis: (id) => {
+        const before = getHypothesisById(store, id);
         const ok = removeHypothesis(store, id);
-        if (ok) persist(store);
+        if (ok) {
+          persist(store);
+          if (before) syncProjectForFunnel(before.funnelId, store);
+        }
         return ok;
       },
       generateHypothesesForFunnelAction: (funnelId) => {
         const created = generateHypothesesForFunnel(store, funnelId);
-        if (created.length) persist(store);
+        if (created.length) {
+          persist(store);
+          syncProjectForFunnel(funnelId, store);
+        }
         return created;
       },
       generateHypothesesForMetricAction: (metric) => {
         const created = generateHypothesesForMetric(store, metric);
-        if (created.length) persist(store);
+        if (created.length) {
+          persist(store);
+          syncProjectForFunnel(metric.funnelId, store);
+        }
+        return created;
+      },
+      generateAiHypothesesForMetricAction: async (funnelId, metric) => {
+        const created = await generateAiHypothesesForMetric(store, funnelId, metric);
+        if (created.length) {
+          persist(store);
+          syncProjectForFunnel(funnelId, store);
+        }
         return created;
       },
       importAuditHypothesesForMetric: (funnelId, metric) => {
         const created = importHypothesesFromAuditForMetric(store, funnelId, metric);
-        if (created.length) persist(store);
+        if (created.length) {
+          persist(store);
+          syncProjectForFunnel(funnelId, store);
+        }
         return created;
       },
       finalizeHypothesisSelectionAction: (funnelId, metricId, selectedIds, patches) => {
         finalizeHypothesisSelection(store, funnelId, metricId, selectedIds, patches);
         persist(store);
+        syncProjectForFunnel(funnelId, store);
       },
 
       // Experiments
@@ -564,7 +617,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         return e;
       },
     };
-  }, [store, persist, refresh]);
+  }, [store, persist, refresh, syncProject, syncProjectForFunnel]);
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;
 }

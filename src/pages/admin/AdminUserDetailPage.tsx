@@ -6,7 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { profileIdentifier } from "@/lib/authLogin";
+import {
+  HYPOTHESIS_PRIORITY_LABELS,
+  HYPOTHESIS_STATUS_LABELS,
+  HYPOTHESIS_STATUS_TONE,
+} from "@/lib/admin/hypothesisLabels";
 import { formatDate } from "@/utils/format";
+import { cn } from "@/lib/utils";
 
 type Profile = {
   user_id: string;
@@ -23,6 +29,16 @@ type ProjectRow = {
   metadata: Record<string, unknown> | null;
 };
 
+type HypothesisRow = {
+  id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  created_at: string;
+};
+
 type EventRow = {
   id: string;
   title: string;
@@ -36,6 +52,7 @@ export default function AdminUserDetailPage() {
   const { userId = "" } = useParams();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [hypotheses, setHypotheses] = useState<HypothesisRow[]>([]);
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,13 +82,26 @@ export default function AdminUserDetailPage() {
 
         if (projectRows.length > 0) {
           const ids = projectRows.map((p) => p.id);
-          const ev = await supabase
-            .from("project_events")
-            .select("id,title,event_type,description,created_at,project_id")
-            .in("project_id", ids)
-            .order("created_at", { ascending: false })
-            .limit(20);
-          if (!cancel && !ev.error) setEvents((ev.data ?? []) as EventRow[]);
+          const [hy, ev] = await Promise.all([
+            supabase
+              .from("hypotheses")
+              .select("id,project_id,title,description,status,priority,created_at")
+              .in("project_id", ids)
+              .order("created_at", { ascending: false }),
+            supabase
+              .from("project_events")
+              .select("id,title,event_type,description,created_at,project_id")
+              .in("project_id", ids)
+              .order("created_at", { ascending: false })
+              .limit(20),
+          ]);
+          if (!cancel) {
+            if (!hy.error) setHypotheses((hy.data ?? []) as HypothesisRow[]);
+            if (!ev.error) setEvents((ev.data ?? []) as EventRow[]);
+          }
+        } else {
+          setHypotheses([]);
+          setEvents([]);
         }
       } catch (e) {
         if (!cancel) setError((e as Error).message);
@@ -83,6 +113,16 @@ export default function AdminUserDetailPage() {
       cancel = true;
     };
   }, [userId]);
+
+  const hypothesesByProject = useMemo(() => {
+    const map = new Map<string, HypothesisRow[]>();
+    for (const h of hypotheses) {
+      const list = map.get(h.project_id) ?? [];
+      list.push(h);
+      map.set(h.project_id, list);
+    }
+    return map;
+  }, [hypotheses]);
 
   const avgCompleteness = useMemo(() => {
     if (!projects.length) return 0;
@@ -116,7 +156,7 @@ export default function AdminUserDetailPage() {
       <Button asChild variant="ghost" size="sm" className="-ml-2">
         <Link to="/admin/users">
           <ArrowLeft className="mr-2 h-4 w-4" />
-          К списку пользователей
+          К списку участников
         </Link>
       </Button>
 
@@ -124,7 +164,7 @@ export default function AdminUserDetailPage() {
         <CardHeader className="pb-2">
           <CardTitle className="text-base">{profile.display_name || profileIdentifier(profile)}</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-2 text-sm sm:grid-cols-2">
+        <CardContent className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <span className="text-muted-foreground">Логин: </span>
             {profileIdentifier(profile)}
@@ -144,6 +184,10 @@ export default function AdminUserDetailPage() {
             {projects.length}
           </div>
           <div>
+            <span className="text-muted-foreground">Гипотез: </span>
+            {hypotheses.length}
+          </div>
+          <div>
             <span className="text-muted-foreground">Средняя заполненность: </span>
             {avgCompleteness}%
           </div>
@@ -152,9 +196,9 @@ export default function AdminUserDetailPage() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Кабинеты (проекты)</CardTitle>
+          <CardTitle className="text-base">Проекты и гипотезы</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3 text-sm">
+        <CardContent className="space-y-4 text-sm">
           {projects.length === 0 ? (
             <p className="text-muted-foreground">Участник ещё не создал проектов.</p>
           ) : (
@@ -165,21 +209,75 @@ export default function AdminUserDetailPage() {
                 hypothesesTesting?: number;
                 maxWizardStep?: number;
               };
+              const projectHypotheses = hypothesesByProject.get(p.id) ?? [];
+
               return (
-                <div key={p.id} className="rounded-lg border border-border/50 p-3 space-y-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium truncate">{p.name}</span>
-                    <Badge variant="outline" className="chip">
-                      {p.status}
-                    </Badge>
+                <div key={p.id} className="rounded-lg border border-border/50 overflow-hidden">
+                  <div className="p-3 space-y-1 bg-secondary/20">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium truncate">{p.name}</span>
+                      <Badge variant="outline" className="chip">
+                        {p.status}
+                      </Badge>
+                    </div>
+                    <div className="text-xs text-muted-foreground grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
+                      <span>Заполненность: {meta.completenessScore ?? 0}%</span>
+                      <span>Воронок: {meta.funnelCount ?? 0}</span>
+                      <span>Гипотез: {projectHypotheses.length}</span>
+                      <span>В тесте: {meta.hypothesesTesting ?? 0}</span>
+                      <span>Шаг визарда: {meta.maxWizardStep ?? 0}</span>
+                      <span>Активность: {formatDate(p.last_activity_at)}</span>
+                    </div>
                   </div>
-                  <div className="text-xs text-muted-foreground grid gap-1 sm:grid-cols-2">
-                    <span>Заполненность: {meta.completenessScore ?? 0}%</span>
-                    <span>Воронок: {meta.funnelCount ?? 0}</span>
-                    <span>Гипотез в тесте: {meta.hypothesesTesting ?? 0}</span>
-                    <span>Шаг визарда: {meta.maxWizardStep ?? 0}</span>
-                    <span>Активность: {formatDate(p.last_activity_at)}</span>
-                  </div>
+
+                  {projectHypotheses.length === 0 ? (
+                    <p className="px-3 py-2.5 text-xs text-muted-foreground border-t border-border/30">
+                      Гипотез в этом проекте пока нет.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto border-t border-border/30">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-border/40 text-[10px] uppercase tracking-wider text-muted-foreground">
+                            <th className="text-left py-2 px-3 font-medium">Гипотеза</th>
+                            <th className="text-left py-2 px-3 font-medium">Статус</th>
+                            <th className="text-left py-2 px-3 font-medium">Приоритет</th>
+                            <th className="text-right py-2 px-3 font-medium">Создана</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {projectHypotheses.map((h) => (
+                            <tr key={h.id} className="border-b border-border/20 last:border-0">
+                              <td className="py-2 px-3 font-medium max-w-[320px]">
+                                <div className="truncate" title={h.title}>
+                                  {h.title}
+                                </div>
+                                {h.description ? (
+                                  <div className="text-[11px] text-muted-foreground truncate mt-0.5" title={h.description}>
+                                    {h.description}
+                                  </div>
+                                ) : null}
+                              </td>
+                              <td className="py-2 px-3">
+                                <Badge
+                                  variant="outline"
+                                  className={cn("chip text-[10px]", HYPOTHESIS_STATUS_TONE[h.status] ?? "chip")}
+                                >
+                                  {HYPOTHESIS_STATUS_LABELS[h.status] ?? h.status}
+                                </Badge>
+                              </td>
+                              <td className="py-2 px-3 text-muted-foreground">
+                                {HYPOTHESIS_PRIORITY_LABELS[h.priority] ?? h.priority}
+                              </td>
+                              <td className="py-2 px-3 text-right text-muted-foreground tabular-nums whitespace-nowrap">
+                                {formatDate(h.created_at)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               );
             })

@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Hypothesis, HypothesisStatus } from "@/types/hypothesis";
 import type { Project } from "@/types/project";
 import type { MockStore } from "./storage";
 
@@ -15,6 +16,55 @@ function projectStats(store: MockStore, projectId: string) {
     hypothesesTesting: testing,
     maxWizardStep: maxStep,
   };
+}
+
+function hypothesesForProject(store: MockStore, projectId: string): Hypothesis[] {
+  const funnelIds = new Set(store.funnels.filter((f) => f.projectId === projectId).map((f) => f.id));
+  return store.hypotheses.filter((h) => funnelIds.has(h.funnelId));
+}
+
+function mapHypothesisStatus(status: HypothesisStatus): string {
+  switch (status) {
+    case "testing":
+      return "testing";
+    case "success":
+      return "won";
+    case "failed":
+      return "lost";
+    case "parked":
+      return "archived";
+    case "backlog":
+      return "in_progress";
+    case "draft":
+    default:
+      return "new";
+  }
+}
+
+function mapHypothesisPriority(score: number): "high" | "medium" | "low" {
+  if (score >= 4) return "high";
+  if (score >= 2.5) return "medium";
+  return "low";
+}
+
+function hypothesisToRemotePayload(h: Hypothesis) {
+  const descriptionParts = [h.ifChange, h.thenMetric, h.becauseReason].filter(Boolean);
+  return {
+    app_id: h.id,
+    title: h.title,
+    description: descriptionParts.join(" → ").slice(0, 2000) || null,
+    status: mapHypothesisStatus(h.status),
+    priority: mapHypothesisPriority(h.priorityScore),
+    expected_impact: h.thenMetric || h.metricName || null,
+  };
+}
+
+async function syncHypothesesToRemote(appProjectId: string, store: MockStore): Promise<void> {
+  const payload = hypothesesForProject(store, appProjectId).map(hypothesisToRemotePayload);
+  await supabase.rpc("sync_app_hypotheses", {
+    p_app_id: appProjectId,
+    p_hypotheses: payload,
+  });
 }
 
 export async function syncProjectToRemote(project: Project, store: MockStore): Promise<void> {
@@ -38,6 +88,8 @@ export async function syncProjectToRemote(project: Project, store: MockStore): P
       updatedAt: project.updatedAt,
     },
   });
+
+  await syncHypothesesToRemote(project.id, store);
 }
 
 export async function logProjectActivity(
@@ -62,4 +114,9 @@ export async function logProjectActivity(
     description: description ?? null,
     metadata: metadata ?? null,
   });
+}
+
+export function resolveProjectIdForFunnel(store: MockStore, funnelId: string): string | null {
+  const funnel = store.funnels.find((f) => f.id === funnelId);
+  return funnel?.projectId ?? null;
 }
