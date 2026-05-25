@@ -40,10 +40,12 @@ export type Database = {
         Row: {
           id: string;
           user_id: string;
+          app_id: string | null;
           name: string;
           description: string | null;
           website_url: string | null;
           status: "active" | "archived";
+          metadata: Json;
           created_at: string;
           updated_at: string;
           last_activity_at: string;
@@ -51,10 +53,12 @@ export type Database = {
         Insert: {
           id?: string;
           user_id: string;
+          app_id?: string | null;
           name: string;
           description?: string | null;
           website_url?: string | null;
           status?: "active" | "archived";
+          metadata?: Json;
           created_at?: string;
           updated_at?: string;
           last_activity_at?: string;
@@ -62,10 +66,12 @@ export type Database = {
         Update: {
           id?: string;
           user_id?: string;
+          app_id?: string | null;
           name?: string;
           description?: string | null;
           website_url?: string | null;
           status?: "active" | "archived";
+          metadata?: Json;
           created_at?: string;
           updated_at?: string;
           last_activity_at?: string;
@@ -161,7 +167,22 @@ export type Database = {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      is_admin: {
+        Args: { uid?: string };
+        Returns: boolean;
+      };
+      sync_app_project: {
+        Args: {
+          p_app_id: string;
+          p_name: string;
+          p_description?: string | null;
+          p_website_url?: string | null;
+          p_metadata?: Json;
+        };
+        Returns: string;
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

@@ -18,22 +18,6 @@ export type StageAuditView = {
   leakHint?: string;
 };
 
-const STATUS_RANK: Record<StageAuditStatus, number> = {
-  critical: 5,
-  bad: 4,
-  weak: 3,
-  ok: 2,
-  good: 1,
-};
-
-const METRIC_TO_STAGE: Record<MetricStatus, StageAuditStatus> = {
-  red: "critical",
-  yellow: "weak",
-  green: "good",
-  no_data: "ok",
-  unreliable: "ok",
-};
-
 function metricMatchesDraft(metric: FunnelMetric, draft: FunnelAuditHypothesisDraft): boolean {
   const mn = (draft.metricName ?? "").trim().toLowerCase();
   const name = (metric.name ?? "").trim().toLowerCase();
@@ -91,20 +75,6 @@ export function unassignedHypotheses(
   return all.map((draft, index) => ({ draft, index })).filter(({ index }) => !used.has(index));
 }
 
-function statusFromMetrics(metrics: FunnelMetric[]): StageAuditStatus {
-  if (!metrics.length) return "ok";
-  let worst: StageAuditStatus = "good";
-  for (const m of metrics) {
-    const s = METRIC_TO_STAGE[m.status];
-    if (STATUS_RANK[s] > STATUS_RANK[worst]) worst = s;
-  }
-  return worst;
-}
-
-function mergeStatus(a: StageAuditStatus, b: StageAuditStatus): StageAuditStatus {
-  return STATUS_RANK[a] >= STATUS_RANK[b] ? a : b;
-}
-
 function resolveAuditBlocks(
   report: FunnelAuditReport,
   stages: { id: string; label: string }[],
@@ -154,9 +124,8 @@ export function buildStageAuditViews(
   return stages.map((stage, index) => {
     const stageMetrics = metrics.filter((m) => m.stage === stage.id);
     const audit = auditByStage.get(stage.id);
-    const fromMetrics = statusFromMetrics(stageMetrics);
-    const fromAudit = audit?.status ?? "ok";
-    const status = mergeStatus(fromMetrics, fromAudit);
+    /** Только оценка AI по материалам — план/факт смотрим на шаге «Сигналы». */
+    const status = audit?.status ?? "ok";
 
     const leak = report.funnel?.stages?.find((s) => {
       const leakName = (s.name ?? "").toLowerCase();

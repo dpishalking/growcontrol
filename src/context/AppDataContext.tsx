@@ -117,6 +117,7 @@ import type {
 import type { FunnelStageDefinition, FunnelTypeId } from "@/types/funnelType";
 import { loadStore, saveStore, setStorageScope, type MockStore } from "@/services/storage";
 import { useAuth } from "@/hooks/useAuth";
+import { logProjectActivity, syncProjectToRemote } from "@/services/projectSyncService";
 
 type AppDataContextValue = {
   store: MockStore;
@@ -268,6 +269,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setStore({ ...next });
   }, []);
 
+  const syncProject = useCallback(
+    (project: Project, currentStore: MockStore, event?: { type: string; title: string; description?: string }) => {
+      if (!scopeUserId || guest) return;
+      void syncProjectToRemote(project, currentStore).then(() => {
+        if (event) {
+          void logProjectActivity(project.id, event.type, event.title, event.description, {
+            completenessScore: project.projectCompletenessScore,
+          });
+        }
+      });
+    },
+    [scopeUserId, guest],
+  );
+
   const refresh = useCallback(() => {
     setStore((s) => ({ ...s }));
   }, []);
@@ -287,17 +302,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         if (!canCreateProject(store, maxProjects)) return null;
         const p = createProjectFromIntake(store, input);
         persist(store);
+        syncProject(p, store, { type: "project_created", title: "Проект создан", description: p.projectName });
         return p;
       },
       createEmptyProject: (name) => {
         if (!canCreateProject(store, maxProjects)) return null;
         const p = createBlankProject(store, name);
         persist(store);
+        syncProject(p, store, { type: "project_created", title: "Проект создан", description: p.projectName });
         return p;
       },
       patchProject: (id, patch) => {
         const p = updateProject(store, id, patch);
-        if (p) persist(store);
+        if (p) {
+          persist(store);
+          syncProject(p, store, { type: "project_updated", title: "Проект обновлён", description: p.projectName });
+        }
         return p;
       },
 

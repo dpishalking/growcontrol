@@ -2,7 +2,6 @@ import type { CreateProjectFromIntakeInput, Project } from "@/types/project";
 import { calculateCompleteness, intakeToProjectFields } from "@/utils/completeness";
 import { createId, nowIso } from "@/utils/id";
 import type { MockStore } from "./storage";
-import { DEMO_USER_ID } from "@/data/mock/seed";
 
 export function getProjects(store: MockStore): Project[] {
   return [...store.projects].sort(
@@ -23,7 +22,7 @@ export function createProjectFromIntake(
 
   const project: Project = {
     id: createId("proj"),
-    userId: DEMO_USER_ID,
+    userId: store.user.id,
     projectName: input.projectName,
     businessDescription: partial.businessDescription ?? "",
     targetAudience: partial.targetAudience ?? "",
@@ -49,7 +48,7 @@ export function createBlankProject(store: MockStore, name: string): Project {
   const ts = nowIso();
   const project: Project = {
     id: createId("proj"),
-    userId: DEMO_USER_ID,
+    userId: store.user.id,
     projectName: name.trim() || "Новый проект",
     businessDescription: "",
     targetAudience: "",

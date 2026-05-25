@@ -12,6 +12,7 @@ type ProjectRow = {
   name: string;
   description: string | null;
   status: string;
+  metadata: Record<string, unknown> | null;
   created_at: string;
   last_activity_at: string;
 };
@@ -30,7 +31,7 @@ export default function AdminProjectsPage() {
     (async () => {
       try {
         const [pr, pf] = await Promise.all([
-          supabase.from("projects").select("id,user_id,name,description,status,created_at,last_activity_at").order("last_activity_at", { ascending: false }),
+          supabase.from("projects").select("id,user_id,name,description,status,created_at,last_activity_at,metadata").order("last_activity_at", { ascending: false }),
           supabase.from("profiles").select("user_id,email,display_name"),
         ]);
         if (cancel) return;
@@ -87,6 +88,7 @@ export default function AdminProjectsPage() {
                   <tr className="border-b border-border/60 text-xs uppercase tracking-wider text-muted-foreground">
                     <th className="text-left py-3 px-4 font-medium">Проект</th>
                     <th className="text-left py-3 px-4 font-medium">Владелец</th>
+                    <th className="text-left py-3 px-4 font-medium">Прогресс</th>
                     <th className="text-left py-3 px-4 font-medium">Статус</th>
                     <th className="text-right py-3 px-4 font-medium">Активность</th>
                   </tr>
@@ -94,11 +96,15 @@ export default function AdminProjectsPage() {
                 <tbody>
                   {filtered.map((p) => {
                     const owner = profiles[p.user_id];
+                    const meta = (p.metadata ?? {}) as { completenessScore?: number; funnelCount?: number };
                     return (
                       <tr key={p.id} className="border-b border-border/30 last:border-0 hover:bg-secondary/30">
                         <td className="py-2.5 px-4 font-medium max-w-[260px] truncate">{p.name}</td>
                         <td className="py-2.5 px-4 text-muted-foreground max-w-[220px] truncate">
                           {owner?.display_name || owner?.email || p.user_id.slice(0, 8)}
+                        </td>
+                        <td className="py-2.5 px-4 text-xs text-muted-foreground">
+                          {meta.completenessScore ?? 0}% · {meta.funnelCount ?? 0} воронок
                         </td>
                         <td className="py-2.5 px-4">
                           <Badge
@@ -116,7 +122,7 @@ export default function AdminProjectsPage() {
                   })}
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
+                      <td colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
                         Проектов не найдено
                       </td>
                     </tr>

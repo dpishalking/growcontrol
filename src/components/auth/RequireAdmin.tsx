@@ -2,10 +2,11 @@ import { Navigate } from "react-router-dom";
 import { Loader2, ShieldOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { isAdminUser } from "@/lib/admin/access";
+import { useAdminAccess } from "@/hooks/useAdminAccess";
 
 export function RequireAdmin({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
+  const { isAdmin, loading } = useAdminAccess();
 
   if (loading) {
     return (
@@ -17,7 +18,7 @@ export function RequireAdmin({ children }: { children: React.ReactNode }) {
 
   if (!user) return <Navigate to="/auth?next=/admin" replace />;
 
-  if (!isAdminUser(user.email)) {
+  if (!isAdmin) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-4 text-center">
         <ShieldOff className="h-10 w-10 text-muted-foreground" />

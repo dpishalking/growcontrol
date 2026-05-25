@@ -20,6 +20,7 @@ import AdminOverviewPage from "@/pages/admin/AdminOverviewPage";
 import AdminUsersPage from "@/pages/admin/AdminUsersPage";
 import AdminProjectsPage from "@/pages/admin/AdminProjectsPage";
 import AdminHypothesesPage from "@/pages/admin/AdminHypothesesPage";
+import AdminUserDetailPage from "@/pages/admin/AdminUserDetailPage";
 
 const queryClient = new QueryClient();
 
@@ -69,6 +70,7 @@ export default function App() {
                 >
                   <Route path="/admin" element={<AdminOverviewPage />} />
                   <Route path="/admin/users" element={<AdminUsersPage />} />
+                  <Route path="/admin/users/:userId" element={<AdminUserDetailPage />} />
                   <Route path="/admin/projects" element={<AdminProjectsPage />} />
                   <Route path="/admin/hypotheses" element={<AdminHypothesesPage />} />
                 </Route>

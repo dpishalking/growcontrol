@@ -214,7 +214,7 @@ export function HypothesesStep({ funnel }: { funnel: Funnel }) {
     <WizardLayout
       funnel={funnel}
       activeStep="hypotheses"
-      onBack={() => nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/diagnostics`)}
+      onBack={() => nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/signals`)}
       onNext={handleNext}
       nextLabel="К приоритизации"
       nextDisabled={backlogCount === 0}

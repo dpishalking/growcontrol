@@ -1,6 +1,5 @@
 import { useNavigate, useParams } from "react-router-dom";
-import { AlertCircle, AlertTriangle, CheckCircle2, ShieldQuestion } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Activity, AlertCircle, AlertTriangle, CheckCircle2, ShieldQuestion } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAppData } from "@/context/AppDataContext";
@@ -19,7 +18,7 @@ const STATUS_STYLE: Record<MetricStatus, { className: string; label: string }> =
   unreliable: { className: "border-border/60 text-muted-foreground", label: "Низкая достоверность" },
 };
 
-export function DiagnosticsStep({ funnel }: { funnel: Funnel }) {
+export function SignalsStep({ funnel }: { funnel: Funnel }) {
   const { projectId } = useParams<{ projectId: string }>();
   const nav = useNavigate();
   const { funnelMetricsList, setFunnelStep } = useAppData();
@@ -35,12 +34,23 @@ export function DiagnosticsStep({ funnel }: { funnel: Funnel }) {
   return (
     <WizardLayout
       funnel={funnel}
-      activeStep="diagnostics"
+      activeStep="signals"
       onBack={() => nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/audit`)}
       onNext={handleNext}
       nextLabel="К гипотезам"
     >
       <div className="space-y-4">
+        <div className="flex items-start gap-3 rounded-xl border border-border/50 bg-muted/15 px-4 py-3">
+          <Activity className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+          <div className="space-y-1 min-w-0">
+            <p className="text-sm font-medium">Сигналы по цифрам</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Здесь только план/факт и светофор — без AI. Разбор материалов и текстов — на шаге «Аудит».
+              Отсюда выбираем метрику для гипотез.
+            </p>
+          </div>
+        </div>
+
         {diag.bottleneck ? (
           <Card className="border-destructive/40 bg-destructive/5">
             <CardContent className="p-4 flex gap-3">

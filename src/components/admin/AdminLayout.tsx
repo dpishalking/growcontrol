@@ -102,6 +102,7 @@ export function AdminLayout() {
 
 function titleFromPath(p: string): string {
   if (p === "/admin" || p === "/admin/") return "Обзор";
+  if (p.startsWith("/admin/users/")) return "Кабинет пользователя";
   if (p.startsWith("/admin/users")) return "Пользователи";
   if (p.startsWith("/admin/projects")) return "Проекты";
   if (p.startsWith("/admin/hypotheses")) return "Гипотезы";

@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { AlertCircle, Loader2, RefreshCw } from "lucide-react";
+import { AlertCircle, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import type { FunnelAuditHypothesisDraft } from "@/types/funnelAudit";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { useAppData } from "@/context/AppDataContext";
 import { WizardLayout } from "@/features/wizard/WizardLayout";
 import { FunnelAuditReport } from "@/features/audit/FunnelAuditReport";
@@ -13,6 +12,7 @@ import type { Funnel } from "@/types/funnel";
 import { computeCoverage } from "@/utils/materialAudit";
 import { getAuditSyncStatus } from "@/utils/auditSync";
 import { getStagesForFunnel } from "@/utils/funnelStages";
+import { cn } from "@/lib/utils";
 
 export function AuditStep({ funnel }: { funnel: Funnel }) {
   const { projectId } = useParams<{ projectId: string }>();
@@ -23,7 +23,6 @@ export function AuditStep({ funnel }: { funnel: Funnel }) {
     funnelMaterials,
     funnelMetricsList,
     setFunnelStep,
-    importAuditHypotheses,
     importAuditHypothesesDrafts,
   } = useAppData();
 
@@ -92,7 +91,7 @@ export function AuditStep({ funnel }: { funnel: Funnel }) {
 
   const handleNext = () => {
     setFunnelStep(funnel.id, 6);
-    nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/diagnostics`);
+    nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/signals`);
   };
 
   return (
@@ -101,108 +100,81 @@ export function AuditStep({ funnel }: { funnel: Funnel }) {
       activeStep="audit"
       onBack={() => nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/metrics`)}
       onNext={handleNext}
-      nextLabel="К диагностике"
+      nextLabel="К сигналам"
       nextDisabled={!snapshot?.report}
     >
-      <div className="space-y-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-1 min-w-0">
-            <h2 className="font-display text-xl font-semibold tracking-tight">AI-аудит воронки</h2>
-            <p className="text-sm text-muted-foreground">
-              {typeTemplate.name} · материалов {coverage.materialsCount} · метрик {metrics.length} ·
-              шагов {coverage.requiredCovered}/{coverage.requiredTotal}
-            </p>
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="space-y-2 min-w-0">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary shrink-0" />
+              <h2 className="font-display text-lg font-semibold tracking-tight">AI-аудит</h2>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <StatChip label={typeTemplate.name} />
+              <StatChip label={`${coverage.materialsCount} мат.`} />
+              <StatChip label={`${metrics.length} метрик`} />
+              <StatChip
+                label={`${coverage.requiredCovered}/${coverage.requiredTotal} шагов`}
+                muted={coverage.requiredCovered < coverage.requiredTotal}
+              />
+            </div>
           </div>
-          <Button variant="outline" disabled={loading || !canRun} onClick={() => void handleRun()}>
+          <Button
+            size="sm"
+            variant={snapshot && !syncStatus.inSync ? "default" : "outline"}
+            disabled={loading || !canRun}
+            onClick={() => void handleRun()}
+            className={cn(snapshot && !syncStatus.inSync && "bg-gradient-money text-primary-foreground")}
+          >
             {loading ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
             ) : (
-              <RefreshCw className="mr-2 h-4 w-4" />
+              <RefreshCw className="mr-1.5 h-4 w-4" />
             )}
-            {snapshot ? "Перезапустить" : "Запустить аудит"}
+            {snapshot ? "Обновить" : "Запустить"}
           </Button>
         </div>
 
         {!hasMaterials ? (
-          <Card className="border-dashed">
-            <CardContent className="p-4 text-sm text-muted-foreground">
-              Загрузите материалы на шаге «Материалы» или укажите URL лендинга на шаге «Фокус».
-            </CardContent>
-          </Card>
+          <InlineAlert>
+            Загрузите материалы на шаге «Материалы» или укажите URL лендинга на шаге «Фокус».
+          </InlineAlert>
         ) : null}
 
         {hasMaterials && !hasMetrics ? (
-          <Card className="border-dashed border-warning/40">
-            <CardContent className="p-4 text-sm text-muted-foreground">
-              Сначала добавьте метрики на предыдущем шаге — аудит связывает цифры с материалами по
-              этапам воронки.
-            </CardContent>
-          </Card>
-        ) : null}
-
-        {loading ? (
-          <Card className="border-primary/20 bg-primary/5">
-            <CardContent className="p-8 flex flex-col items-center gap-3 text-sm text-muted-foreground">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="font-medium text-foreground">AI разбирает воронку…</p>
-              <p className="text-xs text-center max-w-sm">
-                Сопоставление материалов, метрик и этапов. Обычно 30–90 секунд.
-              </p>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        {error && !loading ? (
-          <Card className="border-destructive/40 bg-destructive/5">
-            <CardContent className="p-4 flex gap-3 text-sm">
-              <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
-              <div>
-                <p className="font-medium">Аудит не выполнен</p>
-                <p className="text-muted-foreground text-xs mt-1">{error}</p>
-                {/Invalid JWT|401|не настроен|API_KEY|functions\/v1/i.test(error) ? (
-                  <p className="text-xs mt-2 text-muted-foreground">
-                    Проверьте: edge function <code className="text-[11px]">analyze-funnel-audit</code>{" "}
-                    задеплоена, ключ AI-сервиса задан в secrets, в <code className="text-[11px]">.env</code>{" "}
-                    — publishable key, dev-сервер перезапущен после правок.
-                  </p>
-                ) : /HTTP 502|HTTP 503|перегружен|timeout|Failed to fetch/i.test(error) ? (
-                  <p className="text-xs mt-2 text-muted-foreground">
-                    Аудит может идти 1–2 минуты. Подождите и нажмите «Перезапустить». Если повторяется
-                    — попробуйте без тяжёлых файлов или укоротите материалы.
-                  </p>
-                ) : null}
-              </div>
-            </CardContent>
-          </Card>
+          <InlineAlert tone="warning">
+            Сначала добавьте метрики — аудит связывает цифры с материалами по этапам.
+          </InlineAlert>
         ) : null}
 
         {snapshot?.report && !syncStatus.inSync && !loading ? (
-          <Card className="border-warning/40 bg-warning/5">
-            <CardContent className="p-4 flex flex-wrap items-start justify-between gap-3 text-sm">
-              <div className="flex gap-3 min-w-0">
-                <AlertCircle className="h-5 w-5 text-warning shrink-0" />
-                <div>
-                  <p className="font-medium">Данные изменились после аудита</p>
-                  <p className="text-muted-foreground text-xs mt-1">
-                    {syncStatus.messages.length
-                      ? `Обновились: ${syncStatus.messages.join(", ")}.`
-                      : "Текущие метрики и материалы не совпадают с моментом генерации отчёта."}{" "}
-                    Цифры в карточках этапов уже актуальны, но текст AI может быть устаревшим.
-                  </p>
-                </div>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="shrink-0"
-                disabled={loading || !canRun}
-                onClick={() => void handleRun()}
-              >
-                <RefreshCw className="mr-1.5 h-4 w-4" />
-                Перезапустить аудит
-              </Button>
-            </CardContent>
-          </Card>
+          <InlineAlert tone="warning" action={() => void handleRun()}>
+            {syncStatus.messages.length
+              ? `Изменились: ${syncStatus.messages.join(", ")}.`
+              : "Данные изменились."}{" "}
+            Цифры смотрите на шаге «Сигналы» — здесь нужен перезапуск AI.
+          </InlineAlert>
+        ) : null}
+
+        {loading ? (
+          <div className="rounded-2xl border border-border/50 bg-muted/15 px-6 py-10 flex flex-col items-center gap-3">
+            <div className="relative">
+              <div className="h-12 w-12 rounded-full border-2 border-primary/20" />
+              <Loader2 className="absolute inset-0 m-auto h-6 w-6 animate-spin text-primary" />
+            </div>
+            <p className="text-sm font-medium">AI разбирает воронку</p>
+            <p className="text-xs text-muted-foreground text-center max-w-xs">
+              Сопоставление материалов, метрик и этапов · обычно 30–90 сек
+            </p>
+          </div>
+        ) : null}
+
+        {error && !loading ? (
+          <InlineAlert tone="error">
+            <span className="font-medium">Не выполнен: </span>
+            {error}
+          </InlineAlert>
         ) : null}
 
         {snapshot?.report && !loading ? (
@@ -219,13 +191,52 @@ export function AuditStep({ funnel }: { funnel: Funnel }) {
         ) : null}
 
         {!snapshot && !loading && !error && canRun ? (
-          <Card>
-            <CardContent className="p-6 text-center text-sm text-muted-foreground">
-              Нажмите «Запустить аудит» — AI свяжет ваши материалы и метрики по этапам воронки.
-            </CardContent>
-          </Card>
+          <p className="text-sm text-muted-foreground text-center py-6">
+            Аудит запустится автоматически или нажмите «Запустить»
+          </p>
         ) : null}
       </div>
     </WizardLayout>
+  );
+}
+
+function StatChip({ label, muted }: { label: string; muted?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "rounded-full px-2 py-0.5 text-[11px] border border-border/50 bg-muted/20",
+        muted ? "text-warning" : "text-muted-foreground",
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+function InlineAlert({
+  children,
+  tone = "muted",
+  action,
+}: {
+  children: ReactNode;
+  tone?: "muted" | "warning" | "error";
+  action?: () => void;
+}) {
+  const styles = {
+    muted: "border-border/50 bg-muted/15 text-muted-foreground",
+    warning: "border-warning/30 bg-warning-soft/25 text-foreground",
+    error: "border-danger/30 bg-danger-soft/25 text-foreground",
+  };
+
+  return (
+    <div className={cn("rounded-xl border px-3 py-2.5 text-xs sm:text-sm flex gap-2 items-start", styles[tone])}>
+      {tone !== "muted" ? <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 opacity-80" /> : null}
+      <div className="min-w-0 flex-1">{children}</div>
+      {action ? (
+        <Button size="sm" variant="ghost" className="h-7 shrink-0 text-xs" onClick={action}>
+          Обновить
+        </Button>
+      ) : null}
+    </div>
   );
 }

@@ -4,7 +4,7 @@ export type WizardStepId =
   | "materials"
   | "metrics"
   | "audit"
-  | "diagnostics"
+  | "signals"
   | "hypotheses"
   | "prioritization"
   | "plan";
@@ -19,8 +19,8 @@ export const WIZARD_STEPS: {
   { id: "funnel-type", index: 2, title: "Тип воронки", subtitle: "Шаблон этапов, метрик и материалов" },
   { id: "materials", index: 3, title: "Материалы", subtitle: "Сайт, креативы, скрипты, аналитика" },
   { id: "metrics", index: 4, title: "Метрики воронки", subtitle: "План / факт по этапам — основа для аудита и гипотез" },
-  { id: "audit", index: 5, title: "Аудит", subtitle: "Разбор материалов и цифр по этапам воронки" },
-  { id: "diagnostics", index: 6, title: "Диагностика", subtitle: "Светофор, главный ограничитель, метрики денег" },
+  { id: "audit", index: 5, title: "Аудит", subtitle: "AI-разбор материалов и связки этапов воронки" },
+  { id: "signals", index: 6, title: "Сигналы", subtitle: "Светофор план/факт, главный ограничитель, влияние на деньги" },
   { id: "hypotheses", index: 7, title: "Гипотезы", subtitle: "Топ-3 проблемных метрики → выбор одной → генерация гипотез" },
   { id: "prioritization", index: 8, title: "Приоритизация", subtitle: "ICE и группы: быстрые, стратегические, отложить" },
   { id: "plan", index: 9, title: "План тестов", subtitle: "Что тестируем первым, до и после" },

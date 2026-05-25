@@ -6,7 +6,7 @@ import { FunnelTypeStep } from "@/features/wizard/steps/FunnelTypeStep";
 import { MaterialsStep } from "@/features/wizard/steps/MaterialsStep";
 import { AuditStep } from "@/features/wizard/steps/AuditStep";
 import { MetricsStep } from "@/features/wizard/steps/MetricsStep";
-import { DiagnosticsStep } from "@/features/wizard/steps/DiagnosticsStep";
+import { SignalsStep } from "@/features/wizard/steps/SignalsStep";
 import { HypothesesStep } from "@/features/wizard/steps/HypothesesStep";
 import { PrioritizationStep } from "@/features/wizard/steps/PrioritizationStep";
 import { PlanStep } from "@/features/wizard/steps/PlanStep";
@@ -18,7 +18,7 @@ const STEP_IDS: WizardStepId[] = [
   "materials",
   "metrics",
   "audit",
-  "diagnostics",
+  "signals",
   "hypotheses",
   "prioritization",
   "plan",
@@ -46,6 +46,10 @@ export default function FunnelWizardPage() {
 
   if (funnel && step === "details") {
     return <Navigate to={`/projects/${projectId}/funnels/${funnel.id}/wizard/metrics`} replace />;
+  }
+
+  if (funnel && step === "diagnostics") {
+    return <Navigate to={`/projects/${projectId}/funnels/${funnel.id}/wizard/signals`} replace />;
   }
 
   const stepId: WizardStepId = isStepId(step) ? step : "focus";
@@ -79,7 +83,7 @@ export default function FunnelWizardPage() {
           {stepId === "materials" && <MaterialsStep funnel={funnel} />}
           {stepId === "metrics" && <MetricsStep funnel={funnel} />}
           {stepId === "audit" && <AuditStep funnel={funnel} />}
-          {stepId === "diagnostics" && <DiagnosticsStep funnel={funnel} />}
+          {stepId === "signals" && <SignalsStep funnel={funnel} />}
           {stepId === "hypotheses" && <HypothesesStep funnel={funnel} />}
           {stepId === "prioritization" && <PrioritizationStep funnel={funnel} />}
           {stepId === "plan" && <PlanStep funnel={funnel} />}
