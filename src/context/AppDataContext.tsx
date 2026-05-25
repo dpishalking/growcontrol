@@ -118,7 +118,7 @@ import type {
 import type { FunnelStageDefinition, FunnelTypeId } from "@/types/funnelType";
 import { loadStore, saveStore, setStorageScope, type MockStore } from "@/services/storage";
 import { useAuth } from "@/hooks/useAuth";
-import { logProjectActivity, resolveProjectIdForFunnel, syncProjectToRemote } from "@/services/projectSyncService";
+import { logProjectActivity, resolveProjectIdForFunnel, syncAllProjectsToRemote, syncProjectToRemote } from "@/services/projectSyncService";
 
 type AppDataContextValue = {
   store: MockStore;
@@ -265,7 +265,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setStorageScope({ userId: scopeUserId });
-    setStore(initStore({ userId: scopeUserId, email: scopeEmail, name: scopeName }));
+    const next = initStore({ userId: scopeUserId, email: scopeEmail, name: scopeName });
+    setStore(next);
+    if (scopeUserId && !guest && next.projects.length > 0) {
+      void syncAllProjectsToRemote(next);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeUserId, guest]);
 

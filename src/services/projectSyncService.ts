@@ -59,14 +59,6 @@ function hypothesisToRemotePayload(h: Hypothesis) {
   };
 }
 
-async function syncHypothesesToRemote(appProjectId: string, store: MockStore): Promise<void> {
-  const payload = hypothesesForProject(store, appProjectId).map(hypothesisToRemotePayload);
-  await supabase.rpc("sync_app_hypotheses", {
-    p_app_id: appProjectId,
-    p_hypotheses: payload,
-  });
-}
-
 export async function syncProjectToRemote(project: Project, store: MockStore): Promise<void> {
   const stats = projectStats(store, project.id);
   const description =
@@ -90,6 +82,21 @@ export async function syncProjectToRemote(project: Project, store: MockStore): P
   });
 
   await syncHypothesesToRemote(project.id, store);
+}
+
+async function syncHypothesesToRemote(appProjectId: string, store: MockStore): Promise<void> {
+  const payload = hypothesesForProject(store, appProjectId).map(hypothesisToRemotePayload);
+  await supabase.rpc("sync_app_hypotheses", {
+    p_app_id: appProjectId,
+    p_hypotheses: payload,
+  });
+}
+
+/** Зеркалит все локальные проекты участника в Supabase (для админки). */
+export async function syncAllProjectsToRemote(store: MockStore): Promise<void> {
+  for (const project of store.projects) {
+    await syncProjectToRemote(project, store);
+  }
 }
 
 export async function logProjectActivity(
