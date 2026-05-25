@@ -11,7 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 type Mode = "login" | "signup" | "magic";
 
 export default function AuthPage() {
-  const { user, loading, guest, signIn, signUp, signInWithMagicLink, continueAsGuest } = useAuth();
+  const { user, loading, signIn, signUp, signInWithMagicLink } = useAuth();
   const nav = useNavigate();
   const location = useLocation();
   const next = new URLSearchParams(location.search).get("next") || "/dashboard";
@@ -31,7 +31,6 @@ export default function AuthPage() {
   }
 
   if (user) return <Navigate to={next} replace />;
-  if (guest && next === "/dashboard") return <Navigate to={next} replace />;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -85,11 +84,6 @@ export default function AuthPage() {
       toast.success("Вход выполнен");
     }
     nav(next, { replace: true });
-  };
-
-  const handleGuest = () => {
-    continueAsGuest();
-    nav("/dashboard", { replace: true });
   };
 
   return (
@@ -234,24 +228,6 @@ export default function AuthPage() {
                   </p>
                 )}
               </div>
-
-              <div className="relative py-2">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-border/60" />
-                </div>
-                <div className="relative flex justify-center text-[11px] uppercase tracking-wider text-muted-foreground">
-                  <span className="bg-card/80 px-2">или</span>
-                </div>
-              </div>
-
-              <Button variant="outline" className="w-full" onClick={handleGuest}>
-                Продолжить без входа (демо)
-              </Button>
-
-              <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
-                В демо-режиме данные хранятся только в этом браузере. Войдите, чтобы они сохранялись на
-                всех устройствах.
-              </p>
             </div>
           </main>
         </div>
