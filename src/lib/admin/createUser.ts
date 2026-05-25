@@ -1,23 +1,48 @@
 import { validateLogin } from "@/lib/authLogin";
 import { supabase } from "@/integrations/supabase/client";
 
-function parseFnError(error: unknown, data: unknown): string | null {
+type FnErrorBody = { error?: string; message?: string; code?: string };
+
+async function readFnErrorBody(error: unknown): Promise<FnErrorBody | null> {
+  if (!error || typeof error !== "object") return null;
+  const ctx = (error as { context?: Response }).context;
+  if (!ctx || typeof ctx.json !== "function") return null;
+  try {
+    return (await ctx.clone().json()) as FnErrorBody;
+  } catch {
+    return null;
+  }
+}
+
+async function parseFnError(error: unknown, data: unknown): Promise<string | null> {
   if (data && typeof data === "object") {
-    if ("error" in data && data.error) {
-      return humanizeAdminUserError(String(data.error));
+    const body = data as FnErrorBody;
+    if (body.error) return humanizeAdminUserError(String(body.error));
+    if (body.message && body.code) return humanizeAdminUserError(String(body.message));
+    if ("ok" in data && (data as { ok?: boolean }).ok === true) return null;
+  }
+
+  const body = await readFnErrorBody(error);
+  if (body?.error) return humanizeAdminUserError(String(body.error));
+  if (body?.message) return humanizeAdminUserError(String(body.message));
+
+  if (error && typeof error === "object" && "name" in error) {
+    const name = String((error as { name: string }).name);
+    if (name === "FunctionsFetchError") {
+      return "Не удалось связаться с сервером. Проверьте интернет и попробуйте снова.";
     }
-    if ("ok" in data && data.ok === true) {
-      return null;
+    if (name === "FunctionsRelayError") {
+      return "Ошибка Supabase Relay при вызове функции.";
+    }
+    if ("message" in error) {
+      const message = String((error as { message: string }).message);
+      if (message !== "Edge Function returned a non-2xx status code") {
+        return humanizeAdminUserError(message);
+      }
     }
   }
-  if (error && typeof error === "object" && "message" in error) {
-    const message = String((error as { message: string }).message);
-    if (data && typeof data === "object" && "error" in data && data.error) {
-      return humanizeAdminUserError(String(data.error));
-    }
-    return humanizeAdminUserError(message);
-  }
-  return null;
+
+  return "Не удалось создать участника. Проверьте права администратора и деплой admin-create-user.";
 }
 
 export function humanizeAdminUserError(msg: string): string {
@@ -29,11 +54,9 @@ export function humanizeAdminUserError(msg: string): string {
   if (m.includes("invalid email")) return "Некорректный e-mail";
   if (m.includes("password must be at least")) return "Пароль минимум 6 символов";
   if (m.includes("login must be at least")) return "Логин минимум 3 символа";
+  if (m.includes("profile upsert failed")) return "Аккаунт создан, но профиль не сохранился — напишите в поддержку";
   if (m.includes("forbidden")) return "Нет прав администратора";
   if (m.includes("unauthorized")) return "Войдите в аккаунт администратора";
-  if (m.includes("edge function") || m.includes("failed to send")) {
-    return "Не удалось вызвать серверную функцию. Проверьте деплой admin-create-user / admin-invite-user.";
-  }
   return msg;
 }
 
@@ -53,7 +76,7 @@ export async function inviteUserByEmail(
     },
   });
 
-  const parsed = parseFnError(error, data);
+  const parsed = await parseFnError(error, data);
   if (parsed) return { error: parsed };
 
   const userId =
@@ -80,7 +103,7 @@ export async function createUserByAdmin(input: {
     },
   });
 
-  const parsed = parseFnError(error, data);
+  const parsed = await parseFnError(error, data);
   if (parsed) return { error: parsed };
 
   const userId =
