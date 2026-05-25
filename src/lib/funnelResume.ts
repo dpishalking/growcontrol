@@ -10,7 +10,7 @@ export function funnelResumePath(projectId: string, funnel: Funnel): string {
 
 export function funnelNeedsResume(funnel: Funnel): boolean {
   if (funnel.status === "draft") return true;
-  if (funnel.currentWizardStep < 9) return true;
+  if (funnel.currentWizardStep < 8) return true;
 
   const focusRequired = requiredQuestionIds(FOCUS_QUIZ.questions);
   const focusValues = {

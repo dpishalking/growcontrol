@@ -3,9 +3,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowRight,
   Check,
-  FileText,
-  Loader2,
-  Sparkles,
   Target,
   Zap,
 } from "lucide-react";
@@ -25,6 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAppData } from "@/context/AppDataContext";
 import { WizardLayout } from "@/features/wizard/WizardLayout";
 import { HypothesisCard } from "@/features/hypotheses/HypothesisCard";
+import { HypothesisSourcePanel } from "@/features/hypotheses/HypothesisSourcePanel";
 import { HypothesisPickQuiz } from "@/features/hypotheses/HypothesisPickQuiz";
 import { getFunnelTypeTemplate } from "@/data/funnelTypes/catalog";
 import { hasDirectionsForMetric } from "@/data/hypothesisDirections";
@@ -32,11 +30,7 @@ import type { Funnel } from "@/types/funnel";
 import type { Hypothesis } from "@/types/hypothesis";
 import { getStageLabelForFunnel } from "@/utils/funnelStages";
 import { buildDiagnostics, getTopProblemMetrics } from "@/utils/funnelDiagnostics";
-import {
-  auditDraftsForMetric,
-  auditHintForMetric,
-  metricWhyTop,
-} from "@/lib/hypothesisMetricContext";
+import { auditDraftsForMetric } from "@/lib/hypothesisMetricContext";
 import type { FunnelMetric } from "@/types/funnelMetric";
 import { cn } from "@/lib/utils";
 
@@ -190,7 +184,7 @@ export function HypothesesStep({ funnel }: { funnel: Funnel }) {
       metricId: selected.id,
       metricName: selected.name,
       funnelStage: selected.stage,
-      title: `${manualDraft.ifChange.slice(0, 72)}… → ${selected.name}`,
+      title: manualDraft.ifChange.trim(),
       ifChange: manualDraft.ifChange,
       thenMetric: manualDraft.thenMetric || selected.name,
       becauseReason: manualDraft.becauseReason || "Добавлено вручную",
@@ -207,7 +201,7 @@ export function HypothesesStep({ funnel }: { funnel: Funnel }) {
 
   const handleNext = () => {
     setFunnelStep(funnel.id, 8);
-    nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/prioritization`);
+    nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/plan`);
   };
 
   return (
@@ -216,15 +210,14 @@ export function HypothesesStep({ funnel }: { funnel: Funnel }) {
       activeStep="hypotheses"
       onBack={() => nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/signals`)}
       onNext={handleNext}
-      nextLabel="К приоритизации"
+      nextLabel="К плану тестов"
       nextDisabled={backlogCount === 0}
     >
       <div className="space-y-6 max-w-2xl mx-auto">
         <div className="text-center space-y-1">
           <h2 className="font-display text-xl font-semibold tracking-tight">С чего начнём?</h2>
           <p className="text-sm text-muted-foreground">
-            Топ-3 проблемных метрики → выбор одной → гипотезы из библиотеки или аудита → 1–2 в
-            тест
+            ТОП-3 баттлнека, над которыми рекомендую сфокусироваться сразу
           </p>
         </div>
 
@@ -249,7 +242,6 @@ export function HypothesesStep({ funnel }: { funnel: Funnel }) {
               {topMetrics.map((m, i) => {
                 const active = selected?.id === m.id;
                 const isBottleneck = diag.bottleneck?.id === m.id;
-                const auditHint = auditHintForMetric(auditReport, m);
                 return (
                   <li key={m.id}>
                     <button
@@ -265,39 +257,32 @@ export function HypothesesStep({ funnel }: { funnel: Funnel }) {
                           : "border-border/60 bg-card/40 hover:border-primary/30",
                       )}
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1 space-y-1.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1 space-y-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground tabular-nums">
                               #{i + 1}
                             </span>
-                            <p className="text-sm font-semibold">{m.name}</p>
+                            <p className="text-sm font-semibold leading-snug">{m.name}</p>
                             {isBottleneck ? (
                               <span className="chip chip-danger text-[10px]">
                                 <Zap className="h-3 w-3 mr-0.5 inline" />
                                 Ограничитель
                               </span>
-                            ) : null}
-                            <span
-                              className={cn(
-                                "chip text-[10px]",
-                                m.status === "red" ? "chip-danger" : "chip-warning",
-                              )}
-                            >
-                              {m.status === "red" ? "ниже плана" : "под угрозой"}
-                            </span>
+                            ) : (
+                              <span
+                                className={cn(
+                                  "chip text-[10px]",
+                                  m.status === "red" ? "chip-danger" : "chip-warning",
+                                )}
+                              >
+                                {m.status === "red" ? "ниже плана" : "под угрозой"}
+                              </span>
+                            )}
                           </div>
-                          <p className="text-xs text-muted-foreground">
-                            {getStageLabelForFunnel(funnel, m.stage)} · {formatPlanFact(m)}
+                          <p className="text-xs text-muted-foreground tabular-nums">
+                            {formatPlanFact(m)}
                           </p>
-                          <p className="text-[11px] text-muted-foreground/90">
-                            {metricWhyTop(m, i + 1, diag.bottleneck?.id ?? null)}
-                          </p>
-                          {auditHint ? (
-                            <p className="text-[11px] text-primary/90 leading-relaxed whitespace-normal break-words">
-                              {auditHint}
-                            </p>
-                          ) : null}
                         </div>
                         {active ? (
                           <span className="h-6 w-6 rounded-full bg-primary flex items-center justify-center shrink-0">
@@ -312,71 +297,21 @@ export function HypothesesStep({ funnel }: { funnel: Funnel }) {
             </ul>
 
             {selected ? (
-              <div className="space-y-2">
-                <p className="text-xs text-center text-muted-foreground">Источник гипотез</p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Button
-                    variant="outline"
-                    className="h-auto py-3 flex flex-col items-start gap-1"
-                    disabled={generating}
-                    onClick={() => void handleGenerateLibrary()}
-                  >
-                    <span className="flex items-center gap-1.5 text-sm font-medium">
-                      {generating ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Sparkles className="h-4 w-4 text-primary" />
-                      )}
-                      Из библиотеки
-                    </span>
-                    <span className="text-[11px] text-muted-foreground font-normal text-left">
-                      SMART-шаблоны под «{selected.name}»
-                    </span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-auto py-3 flex flex-col items-start gap-1"
-                    disabled={generating || auditDraftCount === 0}
-                    onClick={handleImportAudit}
-                  >
-                    <span className="flex items-center gap-1.5 text-sm font-medium">
-                      <FileText className="h-4 w-4 text-primary" />
-                      Из аудита
-                      {auditDraftCount > 0 ? (
-                        <span className="chip chip-primary text-[10px] ml-1">{auditDraftCount}</span>
-                      ) : null}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground font-normal text-left">
-                      {auditDraftCount > 0
-                        ? "Черновики AI под эту метрику"
-                        : "Сначала пройдите AI-аудит"}
-                    </span>
-                  </Button>
-                </div>
-                <p className="text-center text-[11px] text-muted-foreground">
-                  <button
-                    type="button"
-                    className="underline hover:text-foreground"
-                    onClick={() => setManualOpen(true)}
-                  >
-                    Добавить вручную
-                  </button>
-                  {" · "}
-                  <button
-                    type="button"
-                    className="underline hover:text-foreground"
-                    onClick={() => {
-                      const drafts = hypotheses.filter(
-                        (h) => h.metricId === selected.id && h.status === "draft",
-                      );
-                      if (drafts.length) openQuizWithCandidates([]);
-                      else toast.info("Сначала сгенерируйте гипотезы");
-                    }}
-                  >
-                    Выбрать из уже созданных
-                  </button>
-                </p>
-              </div>
+              <HypothesisSourcePanel
+                generating={generating}
+                auditDraftCount={auditDraftCount}
+                hasLibrary={hasDirectionsForMetric(selected.name)}
+                onLibrary={() => void handleGenerateLibrary()}
+                onAudit={handleImportAudit}
+                onManual={() => setManualOpen(true)}
+                onPickExisting={() => {
+                  const drafts = hypotheses.filter(
+                    (h) => h.metricId === selected.id && h.status === "draft",
+                  );
+                  if (drafts.length) openQuizWithCandidates([]);
+                  else toast.info("Сначала сгенерируйте гипотезы");
+                }}
+              />
             ) : null}
           </>
         )}
@@ -394,11 +329,10 @@ export function HypothesesStep({ funnel }: { funnel: Funnel }) {
         {activeHypotheses.length > 0 ? (
           <section className="space-y-3 pt-2 border-t border-border/60">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="font-display text-base font-semibold">
-                {selected ? `Гипотезы: ${selected.name}` : "Гипотезы"}
-              </h3>
-              <span className="text-xs text-muted-foreground">
-                в очереди: {activeHypotheses.filter((h) => h.status === "backlog").length}
+              <h3 className="text-sm font-medium">Список идей</h3>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {activeHypotheses.length} · в тест{" "}
+                {activeHypotheses.filter((h) => h.status === "backlog").length}
               </span>
             </div>
             <ul className="space-y-2">

@@ -7,7 +7,6 @@ import {
   Download,
   FileJson,
   MoreHorizontal,
-  Sparkles,
   Target,
   TrendingDown,
   Wrench,
@@ -15,7 +14,6 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Collapsible,
   CollapsibleContent,
@@ -28,17 +26,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type {
-  FunnelAuditHypothesisDraft,
-  FunnelAuditReport,
-} from "@/types/funnelAudit";
+import type { FunnelAuditReport } from "@/types/funnelAudit";
 import type { FunnelMetric } from "@/types/funnelMetric";
 import { downloadFunnelAuditJson, downloadFunnelAuditMarkdown } from "@/lib/funnelAuditExport";
 import { cn } from "@/lib/utils";
 import {
   STAGE_STATUS_LABEL,
   buildStageAuditViews,
-  unassignedHypotheses,
   type StageAuditStatus,
   type StageAuditView,
 } from "./auditStageModel";
@@ -82,15 +76,10 @@ type Props = {
   typeName?: string;
   generatedAt?: string;
   metricsInSync?: boolean;
-  onImportHypotheses?: (drafts: FunnelAuditHypothesisDraft[]) => void;
 };
 
 function stageHasDetail(view: StageAuditView): boolean {
-  return (
-    Boolean(view.audit?.problem) ||
-    Boolean(view.audit?.howToFix) ||
-    view.hypotheses.length > 0
-  );
+  return Boolean(view.audit?.problem) || Boolean(view.audit?.howToFix);
 }
 
 function funnelHealthScore(views: StageAuditView[]): number {
@@ -108,15 +97,10 @@ export function FunnelAuditReport({
   typeName,
   generatedAt,
   metricsInSync = true,
-  onImportHypotheses,
 }: Props) {
   const stageViews = useMemo(
     () => buildStageAuditViews(report, stages, metrics),
     [report, stages, metrics],
-  );
-  const looseHypotheses = useMemo(
-    () => unassignedHypotheses(report.hypotheses, stageViews),
-    [report.hypotheses, stageViews],
   );
 
   const visibleStages = useMemo(
@@ -127,18 +111,7 @@ export function FunnelAuditReport({
     [stageViews],
   );
 
-  const defaultOpenStages = useMemo(
-    () =>
-      new Set(
-        visibleStages
-          .filter((v) => STATUS_RANK[v.status] >= STATUS_RANK.weak)
-          .map((v) => v.stageId),
-      ),
-    [visibleStages],
-  );
-
-  const [openStages, setOpenStages] = useState<Set<string>>(() => defaultOpenStages);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [openStages, setOpenStages] = useState<Set<string>>(() => new Set());
   const [tab, setTab] = useState("overview");
   const stageRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -149,7 +122,6 @@ export function FunnelAuditReport({
 
   const health = funnelHealthScore(stageViews);
   const issueCount = stageViews.filter((s) => STATUS_RANK[s.status] >= STATUS_RANK.weak).length;
-  const hypothesisCount = report.hypotheses?.length ?? 0;
 
   const mainStage =
     stageViews.length > 0
@@ -158,23 +130,6 @@ export function FunnelAuditReport({
           stageViews[0],
         )
       : null;
-
-  const toggleHypothesis = (index: number, checked: boolean) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(index);
-      else next.delete(index);
-      return next;
-    });
-  };
-
-  const handleImportSelected = () => {
-    if (!onImportHypotheses || !report.hypotheses?.length) return;
-    const drafts = report.hypotheses.filter((_, i) => selected.has(i));
-    if (!drafts.length) return;
-    onImportHypotheses(drafts);
-    setSelected(new Set());
-  };
 
   const scrollToStage = (stageId: string) => {
     setTab("stages");
@@ -201,13 +156,7 @@ export function FunnelAuditReport({
     });
   const handleJson = () => downloadFunnelAuditJson(report, `${exportBase}-audit`);
 
-  const allHypothesisEntries = useMemo(() => {
-    const fromStages = visibleStages.flatMap((v) =>
-      v.hypotheses.map((h) => ({ ...h, stageLabel: v.stageLabel })),
-    );
-    const loose = looseHypotheses.map((h) => ({ ...h, stageLabel: "Общие" }));
-    return [...fromStages, ...loose];
-  }, [visibleStages, looseHypotheses]);
+  const hypothesisCount = report.hypotheses?.length ?? 0;
 
   return (
     <div className="space-y-4">
@@ -248,7 +197,12 @@ export function FunnelAuditReport({
       </div>
 
       <Tabs value={tab} onValueChange={setTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3 h-9">
+        <h3 className="mx-auto max-w-2xl px-1 text-center font-display text-lg sm:text-xl font-semibold leading-snug tracking-tight text-foreground">
+          Выявили{" "}
+          <span className="bg-gradient-money bg-clip-text text-transparent">ключевые слабые звенья</span>{" "}
+          в воронке на основе анализа смыслов и метрик, которые вы предоставили
+        </h3>
+        <TabsList className="grid w-full grid-cols-2 h-9">
           <TabsTrigger value="overview" className="text-xs sm:text-sm">
             Обзор
           </TabsTrigger>
@@ -260,17 +214,16 @@ export function FunnelAuditReport({
               </span>
             ) : null}
           </TabsTrigger>
-          <TabsTrigger value="hypotheses" className="text-xs sm:text-sm">
-            Гипотезы
-            {hypothesisCount > 0 ? (
-              <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0 text-[10px] tabular-nums">
-                {hypothesisCount}
-              </span>
-            ) : null}
-          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="mt-0 space-y-4 focus-visible:outline-none">
+        <TabsContent value="overview" className="mt-0 space-y-3 focus-visible:outline-none">
+          <SectionHeading
+            title="Карта воронки"
+            hint="Оценка материалов AI · нажмите этап для деталей"
+          />
+          <FunnelStageMap stages={stageViews} onStageClick={scrollToStage} />
+
+          <SectionHeading title="Главный вывод" />
           <OverviewHero
             report={report}
             health={health}
@@ -278,10 +231,11 @@ export function FunnelAuditReport({
             onStageClick={scrollToStage}
           />
 
-          <FunnelStageMap stages={stageViews} onStageClick={scrollToStage} />
-          <p className="text-[11px] text-center text-muted-foreground -mt-2">
-            Карта материалов по этапам · цвет — оценка AI, не план/факт
-          </p>
+          {hypothesisCount > 0 ? (
+            <p className="text-[11px] text-center text-muted-foreground px-1">
+              {hypothesisCount} идей для гипотез — на шаге «Гипотезы»
+            </p>
+          ) : null}
 
           {report.crossMaterialMismatches?.length || report.problems?.length ? (
             <Collapsible>
@@ -322,6 +276,10 @@ export function FunnelAuditReport({
         </TabsContent>
 
         <TabsContent value="stages" className="mt-0 space-y-2 focus-visible:outline-none">
+          <SectionHeading
+            title="Разбор по этапам"
+            hint="Раскройте этап — внутри разбор материалов и рекомендации, что улучшить"
+          />
           {visibleStages.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">
               По этапам замечаний нет — воронка выглядит ровно.
@@ -340,63 +298,21 @@ export function FunnelAuditReport({
                   view={view}
                   open={openStages.has(view.stageId)}
                   onOpenChange={(open) => toggleStage(view.stageId, open)}
-                  selected={selected}
-                  onToggleHypothesis={toggleHypothesis}
                 />
               </div>
             ))
           )}
         </TabsContent>
-
-        <TabsContent value="hypotheses" className="mt-0 space-y-3 focus-visible:outline-none">
-          {!allHypothesisEntries.length ? (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              AI не предложил гипотез — можно добавить вручную на следующем шаге.
-            </p>
-          ) : (
-            allHypothesisEntries.map(({ draft, index, stageLabel }) => (
-              <HypothesisRow
-                key={index}
-                draft={draft}
-                stageLabel={stageLabel}
-                checked={selected.has(index)}
-                onCheckedChange={(c) => toggleHypothesis(index, c)}
-              />
-            ))
-          )}
-        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
 
-      {hypothesisCount > 0 && onImportHypotheses ? (
-        <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs sm:text-sm text-muted-foreground">
-            {selected.size > 0 ? (
-              <>
-                Выбрано <span className="font-medium text-foreground">{selected.size}</span> из{" "}
-                {hypothesisCount}
-              </>
-            ) : (
-              <>Отметьте гипотезы на вкладке «Гипотезы»</>
-            )}
-          </p>
-          <div className="flex gap-2">
-            {selected.size > 0 ? (
-              <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
-                Сбросить
-              </Button>
-            ) : null}
-            <Button
-              size="sm"
-              disabled={selected.size === 0}
-              onClick={handleImportSelected}
-              className="bg-gradient-money text-primary-foreground"
-            >
-              <Sparkles className="mr-1.5 h-4 w-4" />
-              Импорт{selected.size > 0 ? ` (${selected.size})` : ""}
-            </Button>
-          </div>
-        </div>
-      ) : null}
+function SectionHeading({ title, hint }: { title: string; hint?: string }) {
+  return (
+    <div className="space-y-0.5 pt-0.5">
+      <h3 className="text-sm font-medium tracking-tight">{title}</h3>
+      {hint ? <p className="text-[11px] text-muted-foreground leading-snug">{hint}</p> : null}
     </div>
   );
 }
@@ -417,63 +333,80 @@ function OverviewHero({
   const healthBar =
     health >= 70 ? "bg-success" : health >= 45 ? "bg-warning" : "bg-danger";
 
+  const hasDetails =
+    Boolean(report.diagnosis.mainMoneyLeak) ||
+    Boolean(report.diagnosis.mainLever) ||
+    Boolean(report.quickestWin?.action);
+
   return (
-    <div className="rounded-2xl border border-border/50 bg-gradient-to-br from-card via-card to-muted/20 p-5 sm:p-6 space-y-4">
-      <div className="flex flex-wrap items-start gap-4">
-        <div className="shrink-0 space-y-1.5">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Оценка AI</p>
-          <p className={cn("text-3xl font-display font-semibold tabular-nums", healthTone)}>
+    <div className="rounded-xl border border-border/50 bg-card/40 px-4 py-3.5">
+      <div className="flex gap-3 items-start">
+        <div className="shrink-0 pt-0.5">
+          <p className={cn("text-2xl font-display font-semibold tabular-nums leading-none", healthTone)}>
             {health}
-            <span className="text-lg text-muted-foreground font-normal">%</span>
+            <span className="text-sm text-muted-foreground font-normal">%</span>
           </p>
-          <div className="h-1.5 w-16 rounded-full bg-muted overflow-hidden">
+          <div className="mt-1.5 h-1 w-10 rounded-full bg-muted overflow-hidden">
             <div
-              className={cn("h-full rounded-full transition-all duration-700", healthBar)}
+              className={cn("h-full rounded-full", healthBar)}
               style={{ width: `${health}%` }}
             />
           </div>
         </div>
-        <div className="min-w-0 flex-1 space-y-2">
-          <p className="text-lg sm:text-xl font-semibold leading-snug tracking-tight">
+
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <p className="text-sm font-medium leading-snug line-clamp-3">
             {report.diagnosis.mainProblem}
           </p>
           {mainStage && mainStage.status !== "ok" && mainStage.status !== "good" ? (
             <button
               type="button"
               onClick={() => onStageClick(mainStage.stageId)}
-              className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline underline-offset-2"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline underline-offset-2"
             >
-              <Target className="h-3.5 w-3.5" />
+              <Target className="h-3 w-3" />
               Утечка: {mainStage.stageLabel}
-              <ChevronRight className="h-3.5 w-3.5" />
+              <ChevronRight className="h-3 w-3" />
             </button>
           ) : null}
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 text-xs">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-border/50 bg-background/60 px-2.5 py-1 text-muted-foreground">
-          <TrendingDown className="h-3 w-3 text-warning" />
-          {report.diagnosis.mainMoneyLeak}
-          {report.diagnosis.estimatedLossPercent ? (
-            <span className="text-foreground font-medium">· ~{report.diagnosis.estimatedLossPercent}</span>
-          ) : null}
-        </span>
-      </div>
+      {hasDetails ? (
+        <Collapsible className="mt-3 border-t border-border/40 pt-2">
+          <CollapsibleTrigger className="flex w-full items-center justify-between text-xs text-muted-foreground hover:text-foreground transition-colors py-1">
+            <span>Утечки и что делать</span>
+            <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-2 space-y-2.5 text-sm">
+            {report.diagnosis.mainMoneyLeak ? (
+              <p className="text-muted-foreground leading-relaxed">
+                <TrendingDown className="inline h-3.5 w-3.5 text-warning mr-1 -mt-0.5" />
+                {report.diagnosis.mainMoneyLeak}
+                {report.diagnosis.estimatedLossPercent ? (
+                  <span className="text-foreground"> · ~{report.diagnosis.estimatedLossPercent}</span>
+                ) : null}
+              </p>
+            ) : null}
 
-      {report.diagnosis.mainLever ? (
-        <p className="text-sm leading-relaxed border-l-2 border-primary/40 pl-3 text-muted-foreground">
-          <span className="text-foreground font-medium">Главный рычаг: </span>
-          {report.diagnosis.mainLever}
-        </p>
-      ) : report.quickestWin ? (
-        <div className="flex gap-2.5 text-sm">
-          <Zap className="h-4 w-4 text-success shrink-0 mt-0.5" />
-          <div>
-            <p className="font-medium leading-snug">{report.quickestWin.action}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{report.quickestWin.expectedEffect}</p>
-          </div>
-        </div>
+            {report.diagnosis.mainLever ? (
+              <p className="leading-relaxed text-foreground/90">
+                <span className="text-xs font-medium text-primary">Рычаг · </span>
+                {report.diagnosis.mainLever}
+              </p>
+            ) : report.quickestWin ? (
+              <div className="flex gap-2 text-sm">
+                <Zap className="h-4 w-4 text-success shrink-0 mt-0.5" />
+                <div>
+                  <p className="leading-snug">{report.quickestWin.action}</p>
+                  {report.quickestWin.expectedEffect ? (
+                    <p className="text-xs text-muted-foreground mt-0.5">{report.quickestWin.expectedEffect}</p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </CollapsibleContent>
+        </Collapsible>
       ) : null}
     </div>
   );
@@ -483,14 +416,10 @@ function StageCollapsible({
   view,
   open,
   onOpenChange,
-  selected,
-  onToggleHypothesis,
 }: {
   view: StageAuditView;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  selected: Set<number>;
-  onToggleHypothesis: (index: number, checked: boolean) => void;
 }) {
   const { audit } = view;
 
@@ -555,71 +484,12 @@ function StageCollapsible({
               </div>
             ) : null}
 
-            {view.hypotheses.length > 0 ? (
-              <div className="space-y-2">
-                {view.hypotheses.map(({ draft, index }) => (
-                  <HypothesisRow
-                    key={index}
-                    draft={draft}
-                    checked={selected.has(index)}
-                    onCheckedChange={(c) => onToggleHypothesis(index, c)}
-                    compact
-                  />
-                ))}
-              </div>
-            ) : null}
-
-            {!audit?.problem && !audit?.howToFix && !view.hypotheses.length ? (
+            {!audit?.problem && !audit?.howToFix ? (
               <p className="text-sm text-muted-foreground">Замечаний по материалам нет.</p>
             ) : null}
           </div>
         </CollapsibleContent>
       </div>
     </Collapsible>
-  );
-}
-
-function HypothesisRow({
-  draft,
-  checked,
-  onCheckedChange,
-  stageLabel,
-  compact,
-}: {
-  draft: FunnelAuditHypothesisDraft;
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-  stageLabel?: string;
-  compact?: boolean;
-}) {
-  return (
-    <label
-      className={cn(
-        "flex gap-3 rounded-xl border cursor-pointer transition-colors",
-        compact ? "p-2.5" : "p-3",
-        checked ? "border-primary/40 bg-primary/5" : "border-border/40 hover:border-border/70 hover:bg-muted/15",
-      )}
-    >
-      <Checkbox checked={checked} onCheckedChange={(v) => onCheckedChange(v === true)} className="mt-0.5" />
-      <div className="min-w-0 space-y-0.5">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {stageLabel ? (
-            <Badge variant="outline" className="text-[10px] font-normal">
-              {stageLabel}
-            </Badge>
-          ) : null}
-          <Badge variant="outline" className="text-[10px] font-normal">
-            {draft.priority}
-          </Badge>
-          <span className="text-sm font-medium leading-snug">{draft.title}</span>
-        </div>
-        {!compact ? (
-          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{draft.why}</p>
-        ) : null}
-        <p className="text-[11px] text-muted-foreground">
-          {draft.expectedImpact} · {draft.metricName}
-        </p>
-      </div>
-    </label>
   );
 }

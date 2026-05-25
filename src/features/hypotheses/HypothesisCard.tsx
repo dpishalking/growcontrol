@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, ExternalLink, FileWarning, Trash2 } from "lucide-react";
 import { BUCKET_LABELS } from "@/utils/icePriority";
@@ -18,6 +17,20 @@ type Props = {
   onDelete: () => void;
 };
 
+function statusLabel(h: Hypothesis): string {
+  if (h.status === "backlog") return "В очереди";
+  if (h.status === "parked") return "Отложено";
+  if (h.status === "testing") return "В тесте";
+  return "Черновик";
+}
+
+function effectPreview(thenMetric: string): string | null {
+  const t = thenMetric.trim();
+  if (!t) return null;
+  const cut = t.indexOf("(метрика:");
+  return (cut > 0 ? t.slice(0, cut) : t).trim();
+}
+
 export function HypothesisCard({
   hypothesis: h,
   stageLabel,
@@ -25,78 +38,81 @@ export function HypothesisCard({
   materialsStepHref,
   onDelete,
 }: Props) {
-  const statusTone =
-    h.status === "backlog"
-      ? "chip chip-success"
-      : h.status === "parked"
-        ? "chip"
-        : h.status === "testing"
-          ? "chip chip-warning"
-          : "chip chip-primary";
+  const preview = effectPreview(h.thenMetric);
 
   return (
-    <li className="rounded-lg border border-border/60 overflow-hidden">
+    <li className="rounded-xl border border-border/60 overflow-hidden bg-card/25">
       <Accordion type="single" collapsible>
         <AccordionItem value="one" className="border-0">
-          <div className="flex items-start gap-2 px-3 py-2">
-            <AccordionTrigger className="flex-1 py-0 hover:no-underline text-left">
-              <div className="min-w-0 pr-2">
-                <p className="text-sm font-medium leading-snug">{h.title}</p>
-                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                  <Badge variant="outline" className="text-[10px] font-normal">
-                    {h.metricName}
-                  </Badge>
-                  {stageLabel ? (
-                    <Badge variant="secondary" className="text-[10px] font-normal">
-                      {stageLabel}
-                    </Badge>
-                  ) : null}
-                  <Badge variant="outline" className="text-[10px] font-normal">
-                    ICE {h.priorityScore}
-                  </Badge>
-                  <Badge variant="outline" className={cn("text-[10px] font-normal", statusTone)}>
-                    {h.status === "backlog"
-                      ? "В очереди"
-                      : h.status === "parked"
-                        ? "Отложено"
-                        : BUCKET_LABELS[h.bucket].label}
-                  </Badge>
-                </div>
+          <div className="flex items-start gap-1 px-3 py-2.5">
+            <AccordionTrigger className="flex-1 min-w-0 py-0 hover:no-underline text-left items-start gap-2 [&>svg]:shrink-0 [&>svg]:mt-1">
+              <div className="min-w-0 flex-1 space-y-1">
+                <p className="text-sm font-medium leading-snug line-clamp-2">{h.title}</p>
+                {preview ? (
+                  <p className="text-xs text-muted-foreground line-clamp-1">→ {preview}</p>
+                ) : null}
+                <p className="text-[11px] text-muted-foreground">
+                  ICE {h.priorityScore} · {BUCKET_LABELS[h.bucket].label} · {statusLabel(h)}
+                </p>
               </div>
             </AccordionTrigger>
-            <Button size="sm" variant="ghost" className="shrink-0 mt-0.5" onClick={onDelete}>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 shrink-0"
+              onClick={onDelete}
+              aria-label="Удалить гипотезу"
+            >
               <Trash2 className="h-4 w-4 text-destructive" />
             </Button>
           </div>
           <AccordionContent className="px-3 pb-3 pt-0">
-            <dl className="grid gap-2 text-xs border-t border-border/40 pt-3">
-              <Row label="Если изменим">{h.ifChange}</Row>
-              <Row label="То получим">{h.thenMetric}</Row>
-              <Row label="Потому что">{h.becauseReason}</Row>
-              {h.problemReason ? <Row label="Проблема">{h.problemReason}</Row> : null}
-              <Row label="Сейчас → план">
-                {h.currentValue || "—"} → {h.targetValue || "план"}
-              </Row>
-              {h.materialsToChange.length > 0 ? (
-                <Row label="Меняем">
-                  <MaterialsList
-                    labels={h.materialsToChange}
-                    materials={materials}
-                    materialsStepHref={materialsStepHref}
-                  />
+            <dl className="grid gap-3 text-xs border-t border-border/40 pt-3">
+              <Block title="Гипотеза">
+                <Row label="Если">{h.ifChange}</Row>
+                <Row label="То">{h.thenMetric}</Row>
+                <Row label="Потому что">{h.becauseReason}</Row>
+              </Block>
+              <Block title="Проверка">
+                <Row label="Метод">{h.testMethod || "—"}</Row>
+                <Row label="Успех">{h.successCriteria || "—"}</Row>
+                <Row label="План / факт">
+                  {h.currentValue || "—"} → {h.targetValue || "план"}
                 </Row>
-              ) : null}
-              <Row label="Как проверим">{h.testMethod || "—"}</Row>
-              <Row label="Успех, если">{h.successCriteria || "—"}</Row>
-              {h.risk ? <Row label="Guardrail">{h.risk}</Row> : null}
-              <Row label="ICE">
-                Impact {h.impact} · Confidence {h.confidence} · Ease {h.ease} · {h.testDurationDays} дн.
-              </Row>
+                {h.risk ? <Row label="Ограничение">{h.risk}</Row> : null}
+              </Block>
+              {(h.materialsToChange.length > 0 || stageLabel) && (
+                <Block title="Контекст">
+                  {stageLabel ? <Row label="Этап">{stageLabel}</Row> : null}
+                  {h.materialsToChange.length > 0 ? (
+                    <Row label="Материалы">
+                      <MaterialsList
+                        labels={h.materialsToChange}
+                        materials={materials}
+                        materialsStepHref={materialsStepHref}
+                      />
+                    </Row>
+                  ) : null}
+                </Block>
+              )}
+              <p className="text-[10px] text-muted-foreground">
+                Impact {h.impact} · Confidence {h.confidence} · Ease {h.ease} · {h.testDurationDays}{" "}
+                дн.
+              </p>
             </dl>
           </AccordionContent>
         </AccordionItem>
       </Accordion>
     </li>
+  );
+}
+
+function Block({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{title}</p>
+      <div className="space-y-1.5 rounded-lg bg-muted/15 px-2.5 py-2">{children}</div>
+    </div>
   );
 }
 
@@ -122,12 +138,6 @@ function MaterialsList({
               <FileWarning className="h-3 w-3 text-warning shrink-0" />
             )}
             <span>{label}</span>
-            {matched.slice(0, 2).map((m) => (
-              <span key={m.id} className="text-muted-foreground">
-                ({m.title.slice(0, 40)}
-                {m.title.length > 40 ? "…" : ""})
-              </span>
-            ))}
             {!ok && materialsStepHref ? (
               <Link
                 to={materialsStepHref}
@@ -146,9 +156,11 @@ function MaterialsList({
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div>
-      <dt className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">{label}</dt>
-      <dd className="text-foreground/90 leading-relaxed">{children}</dd>
+    <div className={cn("grid gap-0.5 sm:grid-cols-[5.5rem_1fr] sm:gap-2")}>
+      <dt className="text-muted-foreground shrink-0">{label}</dt>
+      <dd className="text-foreground/90 leading-relaxed break-words whitespace-normal min-w-0">
+        {children}
+      </dd>
     </div>
   );
 }

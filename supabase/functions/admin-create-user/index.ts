@@ -37,16 +37,23 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const email = String(body.email ?? "").trim().toLowerCase();
     const name = String(body.name ?? "").trim();
+    const password = String(body.password ?? "");
+
     if (!email || !email.includes("@")) {
       return json({ error: "Invalid email" }, 400);
     }
 
-    const adminClient = createClient(supabaseUrl, serviceKey);
-    const redirectTo = body.redirectTo ?? "https://controlgrow.ru/dashboard";
+    if (password.length < 6) {
+      return json({ error: "Password must be at least 6 characters" }, 400);
+    }
 
-    const { data, error } = await adminClient.auth.admin.inviteUserByEmail(email, {
-      redirectTo,
-      data: name ? { name, full_name: name } : undefined,
+    const adminClient = createClient(supabaseUrl, serviceKey);
+
+    const { data, error } = await adminClient.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: name ? { name, full_name: name } : undefined,
     });
 
     if (error) {

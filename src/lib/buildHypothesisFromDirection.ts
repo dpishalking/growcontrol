@@ -76,13 +76,13 @@ export function buildHypothesisFromDirection(
     guardrailForMetric(metric),
   ].join(". ");
 
-  const title = `${ifChange}, то ${impact}, потому что ${direction.rationale.split(".")[0].toLowerCase()}`;
+  const title = ifChange;
 
   return {
     metricId: metric.id,
     metricName: metric.name,
     funnelStage: metric.stage,
-    title: title.length > 140 ? `${title.slice(0, 137)}…` : title,
+    title,
     ifChange,
     thenMetric,
     becauseReason,

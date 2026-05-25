@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AlertCircle, Loader2, RefreshCw, Sparkles } from "lucide-react";
-import type { FunnelAuditHypothesisDraft } from "@/types/funnelAudit";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useAppData } from "@/context/AppDataContext";
@@ -23,7 +22,6 @@ export function AuditStep({ funnel }: { funnel: Funnel }) {
     funnelMaterials,
     funnelMetricsList,
     setFunnelStep,
-    importAuditHypothesesDrafts,
   } = useAppData();
 
   const materials = funnelMaterials(funnel.id);
@@ -77,15 +75,6 @@ export function AuditStep({ funnel }: { funnel: Funnel }) {
       toast.error(msg);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleImportSelected = (drafts: FunnelAuditHypothesisDraft[]) => {
-    const created = importAuditHypothesesDrafts(funnel.id, drafts);
-    if (created.length) {
-      toast.success(`Импортировано ${created.length} гипотез`);
-    } else {
-      toast.message("Эти гипотезы уже в списке или не удалось импортировать");
     }
   };
 
@@ -186,7 +175,6 @@ export function AuditStep({ funnel }: { funnel: Funnel }) {
             typeName={snapshot.funnelTypeName ?? typeTemplate.name}
             generatedAt={snapshot.generatedAt}
             metricsInSync={syncStatus.inSync}
-            onImportHypotheses={handleImportSelected}
           />
         ) : null}
 

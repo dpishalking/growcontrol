@@ -14,5 +14,8 @@ additional_redirect_urls = [
 [functions.admin-invite-user]
 verify_jwt = true
 
+[functions.admin-create-user]
+verify_jwt = true
+
 [functions.analyze-funnel-audit]
 verify_jwt = false

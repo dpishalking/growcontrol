@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from "react-router-dom";
-import { Activity, AlertCircle, AlertTriangle, CheckCircle2, ShieldQuestion } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, ShieldQuestion } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAppData } from "@/context/AppDataContext";
@@ -40,17 +40,6 @@ export function SignalsStep({ funnel }: { funnel: Funnel }) {
       nextLabel="К гипотезам"
     >
       <div className="space-y-4">
-        <div className="flex items-start gap-3 rounded-xl border border-border/50 bg-muted/15 px-4 py-3">
-          <Activity className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-          <div className="space-y-1 min-w-0">
-            <p className="text-sm font-medium">Сигналы по цифрам</p>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Здесь только план/факт и светофор — без AI. Разбор материалов и текстов — на шаге «Аудит».
-              Отсюда выбираем метрику для гипотез.
-            </p>
-          </div>
-        </div>
-
         {diag.bottleneck ? (
           <Card className="border-destructive/40 bg-destructive/5">
             <CardContent className="p-4 flex gap-3">
@@ -103,8 +92,10 @@ export function SignalsStep({ funnel }: { funnel: Funnel }) {
 
         {diag.moneyMovers.length > 0 ? (
           <Card className="border-border/60">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Сильнее всего влияют на деньги</CardTitle>
+            <CardHeader className="pb-3 pt-5">
+              <CardTitle className="text-center font-display text-lg sm:text-xl font-semibold tracking-tight text-foreground">
+                Сильнее всего влияют на деньги
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-1.5 text-sm">
               {diag.moneyMovers.map((m) => (

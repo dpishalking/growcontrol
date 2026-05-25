@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Funnel } from "@/types/funnel";
-import { WIZARD_STEPS } from "./wizardSteps";
+import { migrateWizardStepIndex, WIZARD_STEPS } from "./wizardSteps";
 import type { WizardStepId } from "./wizardSteps";
 import { getFunnelTypeTemplate } from "@/data/funnelTypes/catalog";
 
@@ -35,7 +35,7 @@ export function WizardLayout({
 }: Props) {
   const nav = useNavigate();
   const activeIdx = WIZARD_STEPS.find((s) => s.id === activeStep)?.index ?? 1;
-  const maxReached = funnel?.currentWizardStep ?? activeIdx;
+  const maxReached = funnel ? migrateWizardStepIndex(funnel.currentWizardStep) : activeIdx;
 
   const focusLabel = funnel
     ? `${funnel.productName || "—"} · ${funnel.trafficSource || "—"} → ${funnel.landingUrl || "—"}`
@@ -66,7 +66,7 @@ export function WizardLayout({
       </Card>
 
       {!quizMode ? (
-        <ol className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-1.5 text-[10px]">
+        <ol className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-1.5 text-[10px]">
           {WIZARD_STEPS.map((s) => {
             const current = s.index === activeIdx;
             const visited = funnel != null && s.index <= maxReached && !current;

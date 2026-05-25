@@ -117,8 +117,14 @@ export function HypothesisPickQuiz({ metric, candidates, materials, onComplete, 
                       </span>
                       <div className="min-w-0">
                         <p className="text-xs text-muted-foreground mb-0.5">Топ #{i + 1} · ICE {h.priorityScore}</p>
-                        <p className="text-sm font-medium leading-snug">{h.title}</p>
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{h.ifChange}</p>
+                        <p className="text-sm font-medium leading-relaxed break-words whitespace-normal">
+                          {h.title}
+                        </p>
+                        {h.ifChange !== h.title ? (
+                          <p className="text-xs text-muted-foreground mt-1 leading-relaxed break-words whitespace-normal">
+                            {h.ifChange}
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                   </button>

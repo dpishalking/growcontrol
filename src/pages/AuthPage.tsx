@@ -116,7 +116,7 @@ export default function AuthPage() {
             {[
               "AI-аудит воронки на базе CRO-фреймворков",
               "Гипотезы по метрикам, не по «здравому смыслу»",
-              "Приоритизация ICE и план тестов",
+              "План тестов по приоритету ICE",
             ].map((item) => (
               <li key={item} className="flex items-start gap-2">
                 <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-primary shrink-0" />

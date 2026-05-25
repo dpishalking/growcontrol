@@ -212,7 +212,7 @@ export function buildDiagnostics(
   return { green, yellow, red, noData, unreliable, bottleneck, moneyMovers };
 }
 
-/** Топ-N проблемных метрик для шага «Гипотезы» (красные/жёлтые, по impact и отставанию от плана). */
+/** Топ-N метрик‑боттleneck для шага «Гипотезы» (красные/жёлтые, по impact и отставанию от плана). */
 export function getTopProblemMetrics(metrics: FunnelMetric[], limit = 3): FunnelMetric[] {
   const pool = metrics.filter((m) => m.status === "red" || m.status === "yellow");
   const score = (m: FunnelMetric) => {

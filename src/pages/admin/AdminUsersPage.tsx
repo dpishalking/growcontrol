@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Search, Loader2, UserPlus } from "lucide-react";
+import { Search, Loader2, UserPlus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,8 +13,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { inviteUserByEmail } from "@/lib/admin/inviteUser";
+import { createUserByAdmin, generateTempPassword, inviteUserByEmail } from "@/lib/admin/createUser";
 import { formatDate } from "@/utils/format";
 
 type Profile = {
@@ -29,12 +30,16 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviting, setInviting] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [mode, setMode] = useState<"create" | "invite">("create");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const loadProfiles = () => {
     setLoading(true);
+    setError(null);
     supabase
       .from("profiles")
       .select("user_id,email,display_name,created_at")
@@ -61,19 +66,48 @@ export default function AdminUsersPage() {
     );
   }, [profiles, q]);
 
-  const handleInvite = async () => {
-    const email = inviteEmail.trim().toLowerCase();
-    if (!email) return;
-    setInviting(true);
-    const result = await inviteUserByEmail(email);
-    setInviting(false);
+  const resetForm = () => {
+    setName("");
+    setEmail("");
+    setPassword("");
+    setMode("create");
+  };
+
+  const handleCreate = async () => {
+    const nextEmail = email.trim().toLowerCase();
+    if (!nextEmail || password.length < 6) {
+      toast.error("Укажите e-mail и пароль (минимум 6 символов)");
+      return;
+    }
+    setSubmitting(true);
+    const result = await createUserByAdmin({ email: nextEmail, password, name });
+    setSubmitting(false);
     if ("error" in result) {
       toast.error(result.error);
       return;
     }
-    toast.success(`Приглашение отправлено на ${email}`);
-    setInviteOpen(false);
-    setInviteEmail("");
+    toast.success(`Пользователь ${nextEmail} создан. Передайте ему пароль для входа.`);
+    setDialogOpen(false);
+    resetForm();
+    loadProfiles();
+  };
+
+  const handleInvite = async () => {
+    const nextEmail = email.trim().toLowerCase();
+    if (!nextEmail) {
+      toast.error("Укажите e-mail");
+      return;
+    }
+    setSubmitting(true);
+    const result = await inviteUserByEmail(nextEmail, name);
+    setSubmitting(false);
+    if ("error" in result) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success(`Приглашение отправлено на ${nextEmail}`);
+    setDialogOpen(false);
+    resetForm();
     loadProfiles();
   };
 
@@ -89,9 +123,9 @@ export default function AdminUsersPage() {
             className="pl-9"
           />
         </div>
-        <Button onClick={() => setInviteOpen(true)}>
+        <Button onClick={() => setDialogOpen(true)}>
           <UserPlus className="mr-2 h-4 w-4" />
-          Пригласить пользователя
+          Добавить пользователя
         </Button>
       </div>
 
@@ -136,7 +170,7 @@ export default function AdminUsersPage() {
                   {filtered.length === 0 ? (
                     <tr>
                       <td colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
-                        Ничего не найдено
+                        Пользователей пока нет. Нажмите «Добавить пользователя».
                       </td>
                     </tr>
                   ) : null}
@@ -147,31 +181,91 @@ export default function AdminUsersPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-        <DialogContent>
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) resetForm();
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Пригласить пользователя</DialogTitle>
+            <DialogTitle>Добавить пользователя</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="invite-email">E-mail</Label>
-            <Input
-              id="invite-email"
-              type="email"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="client@example.com"
-            />
-            <p className="text-xs text-muted-foreground">
-              На почту уйдёт письмо со ссылкой для входа в GrowControl.
-            </p>
-          </div>
+
+          <Tabs value={mode} onValueChange={(v) => setMode(v as "create" | "invite")}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="create">Создать аккаунт</TabsTrigger>
+              <TabsTrigger value="invite">Пригласить</TabsTrigger>
+            </TabsList>
+
+            <div className="space-y-3 pt-3">
+              <div className="space-y-2">
+                <Label htmlFor="user-name">Имя</Label>
+                <Input
+                  id="user-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Иван"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="user-email">E-mail</Label>
+                <Input
+                  id="user-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="client@example.com"
+                />
+              </div>
+
+              <TabsContent value="create" className="mt-0 space-y-2">
+                <Label htmlFor="user-password">Пароль</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="user-password"
+                    type="text"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="минимум 6 символов"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    title="Сгенерировать пароль"
+                    onClick={() => setPassword(generateTempPassword())}
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Аккаунт создаётся сразу. Передайте клиенту e-mail и пароль для входа на /auth.
+                </p>
+              </TabsContent>
+
+              <TabsContent value="invite" className="mt-0">
+                <p className="text-xs text-muted-foreground">
+                  На почту уйдёт письмо со ссылкой — пользователь сам задаст пароль при первом входе.
+                </p>
+              </TabsContent>
+            </div>
+          </Tabs>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setInviteOpen(false)}>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Отмена
             </Button>
-            <Button onClick={handleInvite} disabled={inviting || !inviteEmail.trim()}>
-              {inviting ? "Отправка…" : "Отправить приглашение"}
-            </Button>
+            {mode === "create" ? (
+              <Button onClick={handleCreate} disabled={submitting || !email.trim() || password.length < 6}>
+                {submitting ? "Создание…" : "Создать"}
+              </Button>
+            ) : (
+              <Button onClick={handleInvite} disabled={submitting || !email.trim()}>
+                {submitting ? "Отправка…" : "Отправить приглашение"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
