@@ -28,6 +28,12 @@ jobs:
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
           VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
 
+      - name: Remember built asset hash
+        run: |
+          ASSET=$(grep -oE 'assets/index-[^"]+\.js' dist/index.html | head -1)
+          echo "EXPECTED_ASSET=$ASSET" >> "$GITHUB_ENV"
+          echo "Built $ASSET"
+
       - uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.TIMEWEB_FTP_HOST }}
@@ -35,5 +41,16 @@ jobs:
           password: ${{ secrets.TIMEWEB_FTP_PASSWORD }}
           local-dir: dist/
           server-dir: ${{ secrets.TIMEWEB_FTP_SERVER_DIR }}
-          dangerous-clean-slate: false
-          log-level: minimal
+          dangerous-clean-slate: true
+          log-level: verbose
+
+      - name: Verify live site updated
+        run: |
+          sleep 15
+          REMOTE=$(curl -fsSL https://controlgrow.ru/index.html | grep -oE 'assets/index-[^"]+\.js' | head -1)
+          echo "Expected: $EXPECTED_ASSET"
+          echo "Remote:   $REMOTE"
+          if [ "$REMOTE" != "$EXPECTED_ASSET" ]; then
+            echo "::error::Production still serves old bundle. Check TIMEWEB_FTP_SERVER_DIR (expected /domains/controlgrow.ru/public_html/)."
+            exit 1
+          fi
