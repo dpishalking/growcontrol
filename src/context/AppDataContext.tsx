@@ -118,7 +118,8 @@ import type {
 import type { FunnelStageDefinition, FunnelTypeId } from "@/types/funnelType";
 import { loadStore, saveStore, setStorageScope, type MockStore } from "@/services/storage";
 import { useAuth } from "@/hooks/useAuth";
-import { logProjectActivity, resolveProjectIdForFunnel, syncAllProjectsToRemote, syncProjectToRemote } from "@/services/projectSyncService";
+import { logProjectActivity, resolveProjectIdForFunnel, syncAllProjectsToRemote, syncExperimentToRemote, syncProjectToRemote } from "@/services/projectSyncService";
+import { notifyTestStarted } from "@/services/telegramService";
 import { BILLING_ENABLED } from "@/lib/productFlags";
 
 type AppDataContextValue = {
@@ -609,6 +610,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       startExperimentAction: (input) => {
         const e = startExperiment(store, input);
         persist(store);
+
+        if (!guest && scopeUserId) {
+          const projectId = resolveProjectIdForFunnel(store, input.funnelId);
+          if (projectId) {
+            syncProjectForFunnel(input.funnelId, store);
+
+            const hypothesis = getHypothesisById(store, input.hypothesisId);
+            const project = getProjectById(store, projectId);
+            if (hypothesis && project) {
+              void syncExperimentToRemote(projectId, e).then(() =>
+                notifyTestStarted(projectId, hypothesis, e, project.projectName),
+              );
+            }
+          }
+        }
+
         return e;
       },
       patchExperiment: (id, patch) => {
@@ -622,7 +639,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         return e;
       },
     };
-  }, [store, persist, refresh, syncProject, syncProjectForFunnel]);
+  }, [store, persist, refresh, syncProject, syncProjectForFunnel, scopeUserId, guest]);
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;
 }

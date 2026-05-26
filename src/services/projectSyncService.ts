@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Experiment } from "@/types/experiment";
 import type { Hypothesis, HypothesisStatus } from "@/types/hypothesis";
 import type { Project } from "@/types/project";
 import type { MockStore } from "./storage";
@@ -126,4 +127,25 @@ export async function logProjectActivity(
 export function resolveProjectIdForFunnel(store: MockStore, funnelId: string): string | null {
   const funnel = store.funnels.find((f) => f.id === funnelId);
   return funnel?.projectId ?? null;
+}
+
+/** Синхронизирует эксперимент в Supabase для admin-видимости и scheduled reminders. */
+export async function syncExperimentToRemote(
+  appProjectId: string,
+  experiment: Experiment,
+): Promise<void> {
+  const payload = {
+    app_id: experiment.id,
+    app_hyp_id: experiment.hypothesisId,
+    owner: experiment.owner || null,
+    start_date: experiment.startDate || null,
+    end_date: experiment.endDate || null,
+    budget: experiment.budget || null,
+    status: experiment.decision === "pending" ? "active" : "finished",
+  };
+
+  await supabase.rpc("sync_app_experiment", {
+    p_app_project_id: appProjectId,
+    p_experiment: payload,
+  });
 }

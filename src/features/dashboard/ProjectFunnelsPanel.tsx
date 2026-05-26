@@ -10,7 +10,7 @@ import { buildDiagnostics } from "@/utils/funnelDiagnostics";
 import { formatDate } from "@/utils/format";
 import { funnelNeedsResume, funnelResumeLabel, funnelResumePath } from "@/lib/funnelResume";
 import { getStorageScope, loadFocusDraft } from "@/features/quiz/quizDraftStorage";
-import type { Project } from "@/types/project";
+import { TelegramConnectCard } from "@/features/dashboard/TelegramConnectCard";
 
 type Props = {
   project: Project;
@@ -18,7 +18,7 @@ type Props = {
 };
 
 export function ProjectFunnelsPanel({ project, onClose }: Props) {
-  const { user: authUser } = useAuth();
+  const { user: authUser, guest } = useAuth();
   const scope = getStorageScope(authUser?.id);
   const { projectFunnels, funnelMetricsList, funnelHypotheses } = useAppData();
 
@@ -78,6 +78,10 @@ export function ProjectFunnelsPanel({ project, onClose }: Props) {
             </div>
           </CardContent>
         </Card>
+      ) : null}
+
+      {!guest && authUser ? (
+        <TelegramConnectCard projectId={projectId} projectName={project.projectName} />
       ) : null}
 
       {funnels.length === 0 ? (
