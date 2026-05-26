@@ -60,7 +60,10 @@ function hypothesisToRemotePayload(h: Hypothesis) {
   };
 }
 
-export async function syncProjectToRemote(project: Project, store: MockStore): Promise<void> {
+export async function syncProjectToRemote(
+  project: Project,
+  store: MockStore,
+): Promise<{ ok: boolean; error?: string }> {
   const stats = projectStats(store, project.id);
   const description =
     project.mainGoal?.trim() ||
@@ -68,7 +71,7 @@ export async function syncProjectToRemote(project: Project, store: MockStore): P
     project.productDescription?.trim() ||
     null;
 
-  await supabase.rpc("sync_app_project", {
+  const { error: projectError } = await supabase.rpc("sync_app_project", {
     p_app_id: project.id,
     p_name: project.projectName,
     p_description: description,
@@ -82,15 +85,21 @@ export async function syncProjectToRemote(project: Project, store: MockStore): P
     },
   });
 
-  await syncHypothesesToRemote(project.id, store);
-}
+  if (projectError) {
+    return { ok: false, error: projectError.message };
+  }
 
-async function syncHypothesesToRemote(appProjectId: string, store: MockStore): Promise<void> {
-  const payload = hypothesesForProject(store, appProjectId).map(hypothesisToRemotePayload);
-  await supabase.rpc("sync_app_hypotheses", {
-    p_app_id: appProjectId,
+  const payload = hypothesesForProject(store, project.id).map(hypothesisToRemotePayload);
+  const { error: hypothesesError } = await supabase.rpc("sync_app_hypotheses", {
+    p_app_id: project.id,
     p_hypotheses: payload,
   });
+
+  if (hypothesesError) {
+    console.warn("sync_app_hypotheses failed (non-fatal)", hypothesesError);
+  }
+
+  return { ok: true };
 }
 
 /** Зеркалит все локальные проекты участника в Supabase (для админки). */

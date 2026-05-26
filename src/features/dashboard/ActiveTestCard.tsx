@@ -1,15 +1,12 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Calendar, Target, User } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Experiment } from "@/types/experiment";
 import type { Hypothesis } from "@/types/hypothesis";
 
 type PlanStatus = {
   label: string;
-  chipClass: string;
-  borderClass: string;
+  tone: "muted" | "primary" | "warning" | "danger";
 };
 
 function formatShort(iso?: string | null): string {
@@ -19,134 +16,84 @@ function formatShort(iso?: string | null): string {
   return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
 }
 
-export function getPlanStatus(h: Hypothesis, exp: Experiment | null): PlanStatus {
+export function getPlanStatus(h: Hypothesis, exp: Experiment | null): PlanStatus & { label: string } {
   if (h.status === "backlog") {
-    return {
-      label: "В очереди",
-      chipClass: "bg-muted/60 text-muted-foreground border-border/60",
-      borderClass: "border-l-muted-foreground/40",
-    };
+    return { label: "Очередь", tone: "muted" };
   }
 
   if (h.status === "testing") {
     if (!exp?.endDate) {
-      return {
-        label: "В работе",
-        chipClass: "bg-primary/15 text-primary border-primary/30",
-        borderClass: "border-l-primary",
-      };
+      return { label: "В работе", tone: "primary" };
     }
 
     const end = new Date(exp.endDate);
     end.setHours(23, 59, 59, 999);
-    const now = new Date();
-    const diffMs = end.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffMs / 86_400_000);
+    const diffDays = Math.ceil((end.getTime() - Date.now()) / 86_400_000);
 
-    if (diffDays < 0) {
-      return {
-        label: "Нужен результат",
-        chipClass: "bg-destructive/15 text-destructive border-destructive/30",
-        borderClass: "border-l-destructive",
-      };
-    }
-    if (diffDays === 0) {
-      return {
-        label: "Срок сегодня",
-        chipClass: "bg-warning/15 text-warning border-warning/30",
-        borderClass: "border-l-warning",
-      };
-    }
-    if (diffDays <= 3) {
-      return {
-        label: `Осталось ${diffDays} дн`,
-        chipClass: "bg-warning/15 text-warning border-warning/30",
-        borderClass: "border-l-warning",
-      };
-    }
-
-    return {
-      label: `До ${formatShort(exp.endDate)}`,
-      chipClass: "bg-primary/15 text-primary border-primary/30",
-      borderClass: "border-l-primary",
-    };
+    if (diffDays < 0) return { label: "Итог!", tone: "danger" };
+    if (diffDays === 0) return { label: "Сегодня", tone: "warning" };
+    if (diffDays <= 3) return { label: `${diffDays} дн`, tone: "warning" };
+    return { label: formatShort(exp.endDate), tone: "primary" };
   }
 
-  return {
-    label: "—",
-    chipClass: "bg-muted/60 text-muted-foreground border-border/60",
-    borderClass: "border-l-border",
-  };
+  return { label: "—", tone: "muted" };
 }
 
-function shortTitle(h: Hypothesis): string {
-  const t = h.title.trim();
-  if (t.length <= 90) return t;
-  const cut = t.slice(0, 87).trimEnd();
-  return `${cut}…`;
-}
+const stripeClass = {
+  muted: "from-muted-foreground/50 to-muted-foreground/20",
+  primary: "from-primary to-accent/60",
+  warning: "from-warning to-primary/60",
+  danger: "from-danger to-warning/70",
+} as const;
+
+const badgeClass = {
+  muted: "bg-muted text-muted-foreground",
+  primary: "bg-primary/15 text-primary",
+  warning: "bg-warning/15 text-warning",
+  danger: "bg-danger/15 text-danger",
+} as const;
 
 export function ActiveTestCard({
   hypothesis: h,
   experiment,
   href,
+  projectName,
 }: {
   hypothesis: Hypothesis;
   experiment: Experiment | null;
   href: string;
+  projectName?: string;
 }) {
   const status = getPlanStatus(h, experiment);
+  const title = h.title.length > 72 ? `${h.title.slice(0, 69)}…` : h.title;
 
   return (
-    <Link to={href} className="group block h-full">
-      <Card
-        className={cn(
-          "h-full border-border/60 bg-card/30 transition-all",
-          "hover:border-primary/35 hover:shadow-glow hover:bg-card/50",
-          "border-l-[3px]",
-          status.borderClass,
-        )}
-      >
-        <CardContent className="p-4 flex flex-col gap-3 h-full">
-          <div className="flex items-start justify-between gap-2">
-            <Badge
-              variant="outline"
-              className={cn("text-[10px] font-medium shrink-0", status.chipClass)}
-            >
-              {status.label}
-            </Badge>
-            <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
-          </div>
-
-          <p className="text-sm font-medium leading-snug line-clamp-2 flex-1 min-h-[2.5rem]">
-            {shortTitle(h)}
+    <Link
+      to={href}
+      className="group flex overflow-hidden rounded-xl border border-border/70 bg-muted/20 transition-all hover:border-primary/35 hover:bg-muted/35 hover:shadow-[0_8px_24px_-12px_hsl(var(--primary)/0.25)]"
+    >
+      <div
+        className={cn("w-1 shrink-0 bg-gradient-to-b", stripeClass[status.tone])}
+        aria-hidden
+      />
+      <div className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 sm:px-4">
+        <span
+          className={cn(
+            "shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+            badgeClass[status.tone],
+          )}
+        >
+          {status.label}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-foreground">{title}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {projectName ? `${projectName} · ` : ""}
+            {h.metricName}
           </p>
-
-          <div className="space-y-1.5 pt-1 border-t border-border/40">
-            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <Target className="h-3 w-3 shrink-0" />
-              <span className="line-clamp-1">{h.metricName}</span>
-            </div>
-            {experiment?.owner ? (
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <User className="h-3 w-3 shrink-0" />
-                <span className="line-clamp-1">{experiment.owner}</span>
-              </div>
-            ) : h.status === "backlog" ? (
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
-                <User className="h-3 w-3 shrink-0" />
-                <span>Назначьте ответственного</span>
-              </div>
-            ) : null}
-            {experiment?.endDate && h.status === "testing" ? (
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <Calendar className="h-3 w-3 shrink-0" />
-                <span>до {formatShort(experiment.endDate)}</span>
-              </div>
-            ) : null}
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+        <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-all group-hover:translate-x-0.5 group-hover:text-primary" />
+      </div>
     </Link>
   );
 }

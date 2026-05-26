@@ -11,9 +11,13 @@ function sanitizeAiErrorMessage(msg: string): string {
 export type FunnelAuditApiResult = {
   audit: unknown;
   promptVersion?: string;
+  telegramSent?: number;
 };
 
-export async function runFunnelAuditApi(payload: FunnelAuditApiPayload): Promise<FunnelAuditApiResult> {
+export async function runFunnelAuditApi(
+  payload: FunnelAuditApiPayload,
+  signal?: AbortSignal,
+): Promise<FunnelAuditApiResult> {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
@@ -37,6 +41,7 @@ export async function runFunnelAuditApi(payload: FunnelAuditApiPayload): Promise
     method: "POST",
     headers,
     body: JSON.stringify(payload),
+    signal,
   });
 
   const data = await resp.json().catch(() => ({}));
@@ -57,5 +62,9 @@ export async function runFunnelAuditApi(payload: FunnelAuditApiPayload): Promise
     throw new Error("AI не вернул отчёт");
   }
 
-  return { audit: data.audit, promptVersion: data.promptVersion };
+  return {
+    audit: data.audit,
+    promptVersion: data.promptVersion,
+    telegramSent: typeof data.telegramSent === "number" ? data.telegramSent : undefined,
+  };
 }

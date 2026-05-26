@@ -1,7 +1,7 @@
-import { ArrowUpRight, FlaskConical, GitBranch, PlayCircle } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatDate } from "@/utils/format";
 import type { ProjectCardModel } from "./useDashboardSnapshot";
+import { DashboardFrame } from "./DashboardFrame";
 
 type Props = {
   model: ProjectCardModel;
@@ -9,94 +9,102 @@ type Props = {
   onOpen: () => void;
 };
 
+function statusLine(model: ProjectCardModel): {
+  text: string;
+  tone?: "danger" | "success" | "primary";
+} {
+  if (model.resumeCount > 0) {
+    return { text: `Продолжить мастер · ${model.progressPercent}%`, tone: "primary" };
+  }
+  if (model.activeTests > 0) {
+    return { text: `${model.activeTests} тестов в плане`, tone: "success" };
+  }
+  if (model.redMetrics > 0) {
+    return { text: `${model.redMetrics} метрик ниже плана`, tone: "danger" };
+  }
+  if (model.funnelCount === 0) {
+    return { text: "Создайте первую воронку" };
+  }
+  return { text: model.latestFunnelName ?? `${model.funnelCount} воронок` };
+}
+
 export function DashboardProjectCard({ model, selected, onOpen }: Props) {
-  const { project, funnelCount, resumeCount, redMetrics, activeTests, progressPercent, primaryAction, latestFunnelName } =
-    model;
+  const { project, funnelCount, progressPercent } = model;
+  const status = statusLine(model);
+  const gradId = `progress-${project.id}`;
 
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className={cn(
-        "dashboard-project group relative w-full overflow-hidden rounded-2xl border text-left transition-all duration-300",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-        selected
-          ? "border-primary/50 bg-primary/[0.06] shadow-glow"
-          : "border-border/50 bg-card/30 hover:-translate-y-0.5 hover:border-primary/35 hover:bg-card/50 hover:shadow-glow",
-      )}
+    <DashboardFrame
+      variant={selected ? "primary" : "default"}
+      className="transition-transform duration-200 hover:scale-[1.01]"
     >
-      <div
+      <button
+        type="button"
+        onClick={onOpen}
         className={cn(
-          "absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent opacity-0 transition-opacity",
-          selected ? "opacity-100" : "group-hover:opacity-100",
+          "group flex w-full items-center gap-4 px-4 py-4 text-left",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-card",
         )}
-        aria-hidden
-      />
+      >
+        <div className="relative flex h-12 w-12 shrink-0 items-center justify-center">
+          <svg className="h-12 w-12 -rotate-90" viewBox="0 0 40 40" aria-hidden>
+            <circle
+              cx="20"
+              cy="20"
+              r="16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              className="text-muted"
+            />
+            <circle
+              cx="20"
+              cy="20"
+              r="16"
+              fill="none"
+              stroke={`url(#${gradId})`}
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeDasharray={`${funnelCount > 0 ? Math.max(progressPercent, 3) : 0} 100`}
+              pathLength={100}
+              className="transition-all duration-700 ease-out"
+            />
+            <defs>
+              <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="hsl(var(--primary))" />
+                <stop offset="100%" stopColor="hsl(var(--accent))" />
+              </linearGradient>
+            </defs>
+          </svg>
+          <span className="absolute text-[11px] font-bold tabular-nums text-foreground">
+            {funnelCount > 0 ? `${progressPercent}` : "—"}
+          </span>
+        </div>
 
-      <div className="flex h-full flex-col gap-4 p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 space-y-1">
-            <p className="font-display text-lg font-semibold leading-snug">{project.projectName}</p>
-            {latestFunnelName ? (
-              <p className="truncate text-xs text-muted-foreground">{latestFunnelName}</p>
-            ) : (
-              <p className="text-xs text-muted-foreground">Воронок пока нет</p>
-            )}
-          </div>
-          <span
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-display text-base font-semibold text-foreground">
+            {project.projectName}
+          </p>
+          <p
             className={cn(
-              "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all",
-              selected
-                ? "border-primary/30 bg-primary/15 text-primary"
-                : "border-border/60 bg-background/40 text-muted-foreground group-hover:border-primary/25 group-hover:text-primary",
+              "mt-1 truncate text-sm",
+              status.tone === "danger" && "font-medium text-danger",
+              status.tone === "success" && "font-medium text-success",
+              status.tone === "primary" && "font-medium text-primary",
+              !status.tone && "text-muted-foreground",
             )}
           >
-            <ArrowUpRight className="h-4 w-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
-          </span>
+            {status.text}
+          </p>
         </div>
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
-            <span>Прогресс мастера</span>
-            <span className="tabular-nums">{funnelCount > 0 ? `${progressPercent}%` : "—"}</span>
-          </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-muted/60">
-            <div
-              className="h-full rounded-full bg-gradient-money transition-all duration-500"
-              style={{ width: `${funnelCount > 0 ? Math.max(progressPercent, 4) : 0}%` }}
-            />
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-1.5">
-          <span className="chip">
-            <GitBranch className="h-3 w-3" />
-            {funnelCount} {funnelCount === 1 ? "воронка" : funnelCount < 5 ? "воронки" : "воронок"}
-          </span>
-          {resumeCount > 0 ? (
-            <span className="chip chip-primary">
-              <PlayCircle className="h-3 w-3" />
-              продолжить
-            </span>
-          ) : null}
-          {activeTests > 0 ? (
-            <span className="chip chip-success">
-              <FlaskConical className="h-3 w-3" />
-              {activeTests} в плане
-            </span>
-          ) : null}
-          {redMetrics > 0 ? (
-            <span className="chip chip-danger">{redMetrics} ниже плана</span>
-          ) : null}
-        </div>
-
-        <div className="mt-auto flex items-center justify-between gap-2 border-t border-border/40 pt-3">
-          <span className="text-[11px] text-muted-foreground">Обновлён {formatDate(project.updatedAt)}</span>
-          <span className="text-[11px] font-medium text-primary/90 opacity-0 transition-opacity group-hover:opacity-100">
-            {primaryAction}
-          </span>
-        </div>
-      </div>
-    </button>
+        <ChevronRight
+          className={cn(
+            "h-5 w-5 shrink-0 transition-transform",
+            selected ? "translate-x-0.5 text-primary" : "text-muted-foreground group-hover:translate-x-0.5",
+          )}
+        />
+      </button>
+    </DashboardFrame>
   );
 }

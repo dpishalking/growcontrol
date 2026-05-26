@@ -29,18 +29,35 @@ export async function sendTelegramMessage(
 ): Promise<{ ok: boolean; detail?: unknown }> {
   const token = botToken ?? requireBotToken();
 
-  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      parse_mode: "HTML",
-      disable_web_page_preview: true,
-    }),
+  async function post(body: Record<string, unknown>) {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json().catch(() => null);
+    return { res, json };
+  }
+
+  let { res, json } = await post({
+    chat_id: chatId,
+    text,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
   });
 
-  const json = await res.json().catch(() => null);
+  if (!res.ok) {
+    const desc = (json as { description?: string })?.description ?? "";
+    if (/can't parse entities|parse entities/i.test(desc)) {
+      const plain = text.replace(/<[^>]+>/g, "");
+      ({ res, json } = await post({
+        chat_id: chatId,
+        text: plain,
+        disable_web_page_preview: true,
+      }));
+    }
+  }
+
   if (!res.ok) {
     console.error("Telegram sendMessage error", chatId, JSON.stringify(json));
     return { ok: false, detail: json };

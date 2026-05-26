@@ -8,20 +8,21 @@ import {
   createTelegramConnectCode,
   getProjectTelegramChats,
   telegramBotUsername,
-  telegramDeepLink,
   unlinkProjectTelegramChat,
   type TelegramConnectCode,
   type TelegramLinkedChat,
 } from "@/services/telegramService";
 import { useAppData } from "@/context/AppDataContext";
 import { syncProjectToRemote } from "@/services/projectSyncService";
+import { supabase } from "@/integrations/supabase/client";
 
 type Props = {
   projectId: string;
   projectName: string;
+  compact?: boolean;
 };
 
-export function TelegramConnectCard({ projectId, projectName }: Props) {
+export function TelegramConnectCard({ projectId, projectName, compact = false }: Props) {
   const { store, getProject } = useAppData();
   const [loading, setLoading] = useState(false);
   const [chats, setChats] = useState<TelegramLinkedChat[]>([]);
@@ -39,20 +40,32 @@ export function TelegramConnectCard({ projectId, projectName }: Props) {
   const handleGenerateCode = async () => {
     setLoading(true);
 
-    const project = getProject(projectId);
-    if (project) {
-      await syncProjectToRemote(project, store);
-    }
-
-    const code = await createTelegramConnectCode(projectId);
-    setLoading(false);
-
-    if (!code) {
-      toast.error("Не удалось создать код. Проверьте, что проект синхронизирован.");
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData.session) {
+      setLoading(false);
+      toast.error("Войдите в аккаунт — в гостевом режиме Telegram недоступен");
       return;
     }
 
-    setConnectCode(code);
+    const project = getProject(projectId);
+    if (project) {
+      const syncResult = await syncProjectToRemote(project, store);
+      if (!syncResult.ok) {
+        setLoading(false);
+        toast.error(`Синхронизация проекта: ${syncResult.error ?? "ошибка"}`);
+        return;
+      }
+    }
+
+    const result = await createTelegramConnectCode(projectId);
+    setLoading(false);
+
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+
+    setConnectCode(result.code);
     toast.success("Код создан — действует 30 минут");
   };
 
@@ -78,9 +91,8 @@ export function TelegramConnectCard({ projectId, projectName }: Props) {
     ? new Date(connectCode.expires_at).getTime() < Date.now()
     : false;
 
-  return (
-    <Card className="border-border/60 bg-card/40">
-      <CardContent className="space-y-4 p-4">
+  const body = (
+    <>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="flex items-center gap-2 text-sm font-medium">
@@ -148,24 +160,20 @@ export function TelegramConnectCard({ projectId, projectName }: Props) {
             </div>
 
             <ol className="space-y-1.5 text-xs text-muted-foreground">
-              <li>1. Добавьте @{botName} в командный чат</li>
+              <li>1. Добавьте @{botName} в <strong className="text-foreground">командный чат</strong></li>
               <li>
-                2. Напишите в чат:{" "}
+                2. Напишите <strong className="text-foreground">в группе</strong> (не в личке бота):{" "}
                 <code className="rounded bg-background/60 px-1 py-0.5 text-foreground">
                   /connect {connectCode.code}
                 </code>
               </li>
+              <li>3. Один код можно использовать и в личке, и в группе — пока не истёк (30 мин)</li>
             </ol>
 
             <div className="flex flex-wrap gap-2">
               <Button type="button" size="sm" variant="outline" onClick={() => void handleCopyCommand()}>
                 <Copy className="mr-1.5 h-3.5 w-3.5" />
                 Скопировать команду
-              </Button>
-              <Button type="button" size="sm" variant="outline" asChild>
-                <a href={telegramDeepLink(connectCode.code)} target="_blank" rel="noreferrer">
-                  Открыть бота
-                </a>
               </Button>
             </div>
           </div>
@@ -181,7 +189,16 @@ export function TelegramConnectCard({ projectId, projectName }: Props) {
         >
           {connectCode && !codeExpired ? "Новый код" : "Подключить Telegram"}
         </Button>
-      </CardContent>
+    </>
+  );
+
+  if (compact) {
+    return <div className="space-y-4">{body}</div>;
+  }
+
+  return (
+    <Card className="border-border/60 bg-card/40">
+      <CardContent className="space-y-4 p-4">{body}</CardContent>
     </Card>
   );
 }

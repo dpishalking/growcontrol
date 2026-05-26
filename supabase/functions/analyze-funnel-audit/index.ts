@@ -1,16 +1,20 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { FUNNEL_AUDIT_GEMINI_SCHEMA } from "../_shared/funnelAuditGeminiSchema.ts";
-import { FUNNEL_AUDIT_SYSTEM_KNOWLEDGE } from "../_shared/funnelAuditSystemPrompt.ts";
+import { FUNNEL_AUDIT_GEMINI_SCHEMA_LITE } from "../_shared/funnelAuditGeminiSchemaLite.ts";
+import { FUNNEL_AUDIT_SYSTEM_LITE } from "../_shared/funnelAuditSystemPrompt.ts";
 import { funnelTypeAuditRules } from "../_shared/funnelTypeAuditRules.ts";
+import { type GeminiPart, geminiFlashModel, geminiJsonResponse } from "../_shared/gemini.ts";
 import {
-  type GeminiPart,
-  fetchImageAsInlinePart,
-  geminiFlashModel,
-  geminiForcedFunctionCall,
-  geminiJsonResponse,
-} from "../_shared/gemini.ts";
+  createUserClient,
+  requireBotToken,
+  sendTelegramMessage,
+} from "../_shared/telegram.ts";
+import { formatAuditDigestTelegram } from "../_shared/telegramMessageFormat.ts";
 
-const PROMPT_VERSION = "funnel-audit-v4";
+const PROMPT_VERSION = "funnel-audit-lite-v1";
+const GEMINI_MAX_OUTPUT_TOKENS = 8192;
+const MATERIAL_TEXT_MAX = 500;
+const MAX_MATERIALS = 8;
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -25,15 +29,21 @@ function buildAuditGeminiErrorResponse(msg: string): Response {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+  if (/compute resources|WORKER_LIMIT|out of memory|OOM|memory limit/i.test(m)) {
+    return new Response(
+      JSON.stringify({ error: "Сервер не справился с объёмом данных. Попробуйте снова." }),
+      { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
   if (/503|"UNAVAILABLE"|high demand|overloaded|DEADLINE_EXCEEDED/i.test(m)) {
     return new Response(
-      JSON.stringify({ error: "Сервис AI временно перегружен. Подождите 1–2 минуты и запустите снова." }),
+      JSON.stringify({ error: "Сервис AI временно перегружен. Подождите минуту и запустите снова." }),
       { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
   if (/HTTP 400|INVALID_ARGUMENT|too large|Payload too large/i.test(m)) {
     return new Response(
-      JSON.stringify({ error: "Слишком много данных для одного запроса. Уберите тяжёлые файлы или сократите материалы." }),
+      JSON.stringify({ error: "Слишком много данных. Сократите материалы или метрики." }),
       { status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
@@ -44,99 +54,40 @@ function buildAuditGeminiErrorResponse(msg: string): Response {
     );
   }
   return new Response(
-    JSON.stringify({ error: "Не удалось завершить аудит воронки. Попробуйте ещё раз через минуту." }),
+    JSON.stringify({ error: "Не удалось завершить аудит. Попробуйте ещё раз." }),
     { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
   );
 }
 
-function extractStructuredContent(html: string): string {
-  const cleaned = html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ");
-  const pick = (re: RegExp, max = 20) => {
-    const out: string[] = [];
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(cleaned)) && out.length < max) {
-      const t = (m[1] || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-      if (t) out.push(t);
-    }
-    return out;
-  };
-  const h1 = pick(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, 5);
-  const h2 = pick(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, 20);
-  const text = cleaned.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 12000);
-  return `H1: ${h1.join(" | ") || "—"}\nH2: ${h2.join(" | ") || "—"}\n\nТЕКСТ:\n${text}`;
-}
-
-async function scrapeLanding(url: string): Promise<{ content: string; screenshotUrl: string | null }> {
-  let siteContent = "";
-  let screenshotUrl: string | null = null;
-  const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
-
-  if (FIRECRAWL_API_KEY) {
-    try {
-      const fc = await fetch("https://api.firecrawl.dev/v2/scrape", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          url,
-          formats: ["markdown", { type: "screenshot", fullPage: true }],
-          onlyMainContent: false,
-          waitFor: 1500,
-        }),
-      });
-      const fcData = await fc.json();
-      const doc = fcData?.data ?? fcData;
-      if (doc?.markdown) {
-        siteContent = `MARKDOWN ЛЕНДИНГА:\n${String(doc.markdown).slice(0, 24000)}`;
-      }
-      if (typeof doc?.screenshot === "string" && doc.screenshot.startsWith("http")) {
-        screenshotUrl = doc.screenshot;
-      }
-    } catch (e) {
-      console.error("Firecrawl error:", e);
-    }
-  }
-
-  if (!siteContent) {
-    try {
-      const siteResp = await fetch(url, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; GrowControlAuditor/1.0)" },
-      });
-      siteContent = extractStructuredContent(await siteResp.text());
-    } catch (e) {
-      console.error("Fetch landing error:", e);
-      siteContent = `(не удалось загрузить ${url})`;
-    }
-  }
-
-  return { content: siteContent, screenshotUrl };
-}
+const STATUS_RANK: Record<string, number> = {
+  red: 0,
+  yellow: 1,
+  unreliable: 2,
+  no_data: 3,
+  green: 4,
+};
 
 function buildMaterialsBlock(
   materials: {
-    id: string;
     type: string;
     title: string;
     stage: string;
     url: string;
-    content: string;
     extractedText?: string;
-    source: string;
+    content: string;
   }[],
 ): string {
-  if (!materials.length) return "Материалы не загружены.";
-  return materials
+  if (!materials.length) return "Материалы не загружены — опирайся на метрики и URL.";
+  const slice = materials.slice(0, MAX_MATERIALS);
+  const omitted = materials.length - slice.length;
+  const body = slice
     .map((m, i) => {
-      const body = (m.extractedText || m.content || "").trim().slice(0, 6000);
-      const urlLine = m.url ? `URL: ${m.url}\n` : "";
-      return `--- МАТЕРИАЛ ${i + 1} (${m.type}, этап: ${m.stage}) ---\nНазвание: ${m.title}\n${urlLine}Источник: ${m.source || "—"}\n${body || "(текст не извлечён — опирайся на URL/тип)"}`;
+      const text = (m.extractedText || m.content || "").trim().slice(0, MATERIAL_TEXT_MAX);
+      const urlLine = m.url ? ` (${m.url})` : "";
+      return `${i + 1}. [${m.stage}] ${m.type}: ${m.title}${urlLine}${text ? ` — ${text}` : ""}`;
     })
-    .join("\n\n");
+    .join("\n");
+  return omitted > 0 ? `${body}\n(ещё ${omitted} мат. не показано)` : body;
 }
 
 function buildMetricsBlock(
@@ -147,30 +98,24 @@ function buildMetricsBlock(
     period: string;
     plannedValue: number | null;
     actualValue: number | null;
-    direction: string;
-    confidence: string;
     status: string;
     achievementPercent: number | null;
     revenueImpact: number;
-    dataSource?: string;
     comment?: string;
   }[],
 ): string {
   if (!metrics.length) return "Метрики не переданы.";
-  return metrics
+  const sorted = [...metrics].sort(
+    (a, b) => (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9) ||
+      b.revenueImpact - a.revenueImpact,
+  );
+  return sorted
     .map((m) => {
       const plan = m.plannedValue ?? "—";
       const fact = m.actualValue ?? "—";
-      const ach =
-        m.achievementPercent != null ? `${Math.round(m.achievementPercent)}%` : "—";
-      return [
-        `- [${m.stage}] ${m.name}: факт ${fact} / план ${plan} ${m.unit} (${m.period})`,
-        `  статус: ${m.status}, достижение: ${ach}, impact: ${m.revenueImpact}/5, уверенность: ${m.confidence}`,
-        m.dataSource ? `  источник: ${m.dataSource}` : "",
-        m.comment ? `  комментарий: ${m.comment}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n");
+      const ach = m.achievementPercent != null ? `${Math.round(m.achievementPercent)}%` : "—";
+      const note = m.comment ? ` · ${String(m.comment).slice(0, 80)}` : "";
+      return `- [${m.stage}] ${m.name}: ${fact}/${plan} ${m.unit} · ${m.status} · ${ach} · impact ${m.revenueImpact}/5${note}`;
     })
     .join("\n");
 }
@@ -180,34 +125,105 @@ function buildFunnelContext(funnel: Record<string, unknown>): string {
   const stageLines = stages
     .map((s) => {
       const row = (s && typeof s === "object" ? s : {}) as Record<string, unknown>;
-      return `- ${row.id}: ${row.label}${row.description ? ` — ${row.description}` : ""}`;
+      return `- ${row.id}: ${row.label}`;
     })
     .join("\n");
 
-  const bottlenecks = Array.isArray(funnel.commonBottlenecks)
-    ? funnel.commonBottlenecks.join(", ")
-    : "";
-
   const typeId = String(funnel.typeId ?? funnel.typeName ?? "");
   const typeRules = funnelTypeAuditRules(typeId);
-  const exampleFlow = funnel.exampleFlow ? String(funnel.exampleFlow) : "";
 
   return [
-    `ТИП ВОРОНКИ: ${funnel.typeName ?? funnel.typeId ?? "—"} (id: ${typeId || "—"})`,
-    exampleFlow ? `Цепочка: ${exampleFlow}` : "",
+    `ТИП: ${funnel.typeName ?? typeId}`,
+    funnel.exampleFlow ? `Цепочка: ${funnel.exampleFlow}` : "",
     `Продукт: ${funnel.productName ?? "—"}`,
-    `Описание: ${funnel.productDescription ?? "—"}`,
-    `Средний чек (финальный продукт): ${funnel.averagePrice ?? "—"}`,
-    `Трафик: ${funnel.trafficSource ?? "—"}`,
-    `ЦА: ${funnel.targetAudience ?? "—"}`,
-    `Цель воронки (ФИНАЛЬНАЯ, не микро-цель reg page): ${funnel.funnelGoal ?? "—"}`,
-    `Текущая проблема: ${funnel.currentProblem ?? "—"}`,
-    bottlenecks ? `Типовые узкие места: ${bottlenecks}` : "",
-    `\nЭТАПЫ ВОРОНКИ (stageBlocks — по каждому):\n${stageLines || "—"}`,
-    `\nПРАВИЛА АУДИТА ПО ТИПУ ВОРОНКИ:\n${typeRules}`,
+    `Цель воронки: ${funnel.funnelGoal ?? "—"}`,
+    `Проблема: ${String(funnel.currentProblem ?? "—").slice(0, 200)}`,
+    `\nЭТАПЫ (stageBlocks по каждому):\n${stageLines || "—"}`,
+    `\nПРАВИЛА ТИПА:\n${typeRules}`,
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+async function notifyAuditTelegram(
+  req: Request,
+  body: Record<string, unknown>,
+  audit: unknown,
+  metrics: {
+    name: string;
+    status: string;
+    achievementPercent: number | null;
+    revenueImpact: number;
+  }[],
+): Promise<number> {
+  if (body.notifyTelegram !== true) return 0;
+
+  const appProjectId = typeof body.appProjectId === "string" ? body.appProjectId.trim() : "";
+  const projectName = typeof body.projectName === "string" ? body.projectName.trim() : "Проект";
+  const funnelName = typeof body.funnelName === "string" ? body.funnelName.trim() : "Воронка";
+  const reportUrl = typeof body.reportUrl === "string" ? body.reportUrl.trim() : "";
+
+  if (!appProjectId || !reportUrl) {
+    console.warn("telegram audit: missing appProjectId or reportUrl");
+    return 0;
+  }
+
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) {
+    console.warn("telegram audit: no Authorization header");
+    return 0;
+  }
+
+  let botToken: string;
+  try {
+    botToken = requireBotToken();
+  } catch {
+    console.warn("telegram audit: TELEGRAM_BOT_TOKEN not configured");
+    return 0;
+  }
+
+  const userClient = createUserClient(authHeader);
+  const { data: userData, error: userError } = await userClient.auth.getUser();
+  if (userError || !userData.user) {
+    console.warn("telegram audit: unauthorized");
+    return 0;
+  }
+
+  const { data: chatsRaw, error: chatsError } = await userClient.rpc(
+    "get_project_telegram_chats",
+    { p_app_id: appProjectId },
+  );
+
+  if (chatsError) {
+    console.error("telegram audit: get_project_telegram_chats", chatsError);
+    return 0;
+  }
+
+  const chats = (Array.isArray(chatsRaw) ? chatsRaw : []) as { chat_id?: string }[];
+  const targets: string[] = chats.map((c) => c.chat_id).filter((id): id is string => Boolean(id));
+
+  const fallbackChatId = Deno.env.get("TELEGRAM_CHAT_ID")?.trim();
+  if (targets.length === 0 && fallbackChatId) targets.push(fallbackChatId);
+  if (targets.length === 0) {
+    console.warn("telegram audit: no linked chats for", appProjectId);
+    return 0;
+  }
+
+  const text = formatAuditDigestTelegram({
+    projectName,
+    funnelName,
+    reportUrl,
+    audit: audit as Record<string, unknown>,
+    metrics,
+  });
+
+  let sent = 0;
+  for (const chatId of targets) {
+    const result = await sendTelegramMessage(chatId, text, botToken);
+    if (result.ok) sent++;
+  }
+  console.log(`telegram audit: sent ${sent}/${targets.length} for ${appProjectId}`);
+  return sent;
 }
 
 serve(async (req) => {
@@ -227,10 +243,10 @@ serve(async (req) => {
     const mats = Array.isArray(materials) ? materials : [];
     const mets = Array.isArray(metrics) ? metrics : [];
     if (mets.length === 0) {
-      return new Response(
-        JSON.stringify({ error: "Добавьте метрики воронки перед аудитом" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ error: "Добавьте метрики воронки перед аудитом" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
     if (mats.length === 0 && (!landingUrl || typeof landingUrl !== "string")) {
       return new Response(
@@ -239,26 +255,15 @@ serve(async (req) => {
       );
     }
 
-    let landingContent = "";
-    let screenshotUrl: string | null = null;
-    if (landingUrl && typeof landingUrl === "string" && landingUrl.trim()) {
-      const url = landingUrl.startsWith("http") ? landingUrl : `https://${landingUrl}`;
-      const scraped = await scrapeLanding(url);
-      landingContent = scraped.content;
-      screenshotUrl = scraped.screenshotUrl;
-    }
-
     const funnelCtx = buildFunnelContext(funnel as Record<string, unknown>);
     const materialsBlock = buildMaterialsBlock(
       mats as {
-        id: string;
         type: string;
         title: string;
         stage: string;
         url: string;
         content: string;
         extractedText?: string;
-        source: string;
       }[],
     );
     const metricsBlock = buildMetricsBlock(
@@ -269,84 +274,83 @@ serve(async (req) => {
         period: string;
         plannedValue: number | null;
         actualValue: number | null;
-        direction: string;
-        confidence: string;
         status: string;
         achievementPercent: number | null;
         revenueImpact: number;
-        dataSource?: string;
         comment?: string;
       }[],
     );
 
+    const landingLine =
+      landingUrl && typeof landingUrl === "string" && landingUrl.trim()
+        ? `URL посадочной (не скрапим): ${landingUrl.startsWith("http") ? landingUrl : `https://${landingUrl}`}`
+        : "";
+
     const userText = [
-      "Сделай глубокий AI-аудит ВОРОНКИ (не только лендинг).",
-      "Свяжи МЕТРИКИ с МАТЕРИАЛАМИ по этапам: где цифры проседают — объясни причиной в материалах и что покрутить.",
+      "Быстрый скрининг воронки по метрикам. Не делай site-audit.",
       funnelCtx,
-      "\nМЕТРИКИ ВОРОНКИ (план/факт, статус):\n",
+      "\nМЕТРИКИ (сначала red/yellow):\n",
       metricsBlock,
-      "\nЗАГРУЖЕННЫЕ МАТЕРИАЛЫ ПРОЕКТА:\n",
+      "\nМАТЕРИАЛЫ (кратко):\n",
       materialsBlock,
-      landingContent ? `\nКОНТЕНТ ПОСАДОЧНОЙ:\n${landingContent}` : "",
-      "\nЗаполни все секции отчёта. stageBlocks — по каждому этапу из списка. hypotheses — ровно 10.",
-      screenshotUrl
-        ? "Приложен full-page скриншот лендинга — используй для визуального разбора."
-        : "",
+      landingLine,
+      "\nВерни: diagnosis, 3 problems, stageBlocks по каждому этапу, funnel.stages, 5 hypotheses, systemMessage.",
     ]
       .filter(Boolean)
       .join("\n");
 
-    const auditParamsForApi = FUNNEL_AUDIT_GEMINI_SCHEMA as unknown as Record<string, unknown>;
-    const systemWithJson = `${FUNNEL_AUDIT_SYSTEM_KNOWLEDGE}\n\nФОРМАТ: один JSON. Ключи: diagnosis, problems (3-5), blocks (7), stageBlocks, crossMaterialMismatches, moneyLeaks, growthPotential, beforeAfter, roadmap, funnel, waterfall, offerScore, marketContext, unitEconomics, meclabsScore, systemMessage, finalCta, firstScreenRewrite, ctaPath, hypotheses (10).`;
-
     const userParts: GeminiPart[] = [{ text: userText }];
-    if (screenshotUrl) {
-      const inline = await fetchImageAsInlinePart(screenshotUrl);
-      if (inline) userParts.push(inline);
-    }
-
     const flashModel = geminiFlashModel();
-
-    function auditLooksEmpty(a: unknown): boolean {
-      const d = (a as { diagnosis?: { mainProblem?: string } })?.diagnosis;
-      return !d?.mainProblem || String(d.mainProblem).trim().length < 8;
-    }
 
     let audit: unknown;
     try {
       audit = await geminiJsonResponse({
         model: flashModel,
-        systemInstruction: systemWithJson,
+        systemInstruction: FUNNEL_AUDIT_SYSTEM_LITE,
         userParts,
-        responseSchema: auditParamsForApi,
-        temperature: 0.45,
-        maxOutputTokens: 65536,
+        responseSchema: FUNNEL_AUDIT_GEMINI_SCHEMA_LITE as unknown as Record<string, unknown>,
+        temperature: 0.35,
+        maxOutputTokens: GEMINI_MAX_OUTPUT_TOKENS,
       });
-      if (auditLooksEmpty(audit)) {
-        const { args } = await geminiForcedFunctionCall({
-          model: flashModel,
-          systemInstruction: systemWithJson,
-          userParts,
-          functionName: "return_audit",
-          functionDescription: "Структурированный AI-аудит воронки",
-          parameters: auditParamsForApi,
-          temperature: 0.45,
-          maxOutputTokens: 65536,
-        });
-        audit = args;
-      }
     } catch (e) {
       console.error("Gemini funnel audit error:", e);
       const msg = e instanceof Error ? e.message : String(e);
       return buildAuditGeminiErrorResponse(msg);
     }
 
+    const mainProblem = (audit as { diagnosis?: { mainProblem?: string } })?.diagnosis?.mainProblem;
+    if (!mainProblem || String(mainProblem).trim().length < 8) {
+      return new Response(
+        JSON.stringify({ error: "AI вернул пустой отчёт. Попробуйте запустить аудит ещё раз." }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const telegramSent = await notifyAuditTelegram(
+      req,
+      body as Record<string, unknown>,
+      audit,
+      mets as {
+        name: string;
+        status: string;
+        achievementPercent: number | null;
+        revenueImpact: number;
+      }[],
+    );
+
     return new Response(
-      JSON.stringify({ audit, promptVersion: PROMPT_VERSION }),
+      JSON.stringify({ audit, promptVersion: PROMPT_VERSION, telegramSent }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
     console.error("analyze-funnel-audit error:", e);
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/compute resources|WORKER_LIMIT|out of memory/i.test(msg)) {
+      return new Response(
+        JSON.stringify({ error: "Сервер не справился с объёмом данных. Попробуйте снова." }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
     return new Response(JSON.stringify({ error: "Внутренняя ошибка сервера" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

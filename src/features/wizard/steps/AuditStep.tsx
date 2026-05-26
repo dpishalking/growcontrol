@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { AlertCircle, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { AlertCircle, Loader2, MessageCircle, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useAppData } from "@/context/AppDataContext";
@@ -12,6 +12,10 @@ import { computeCoverage } from "@/utils/materialAudit";
 import { getAuditSyncStatus } from "@/utils/auditSync";
 import { getStagesForFunnel } from "@/utils/funnelStages";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
+import { buildAuditReportUrl, formatAuditDigestTelegram } from "@/lib/telegramAuditFormat";
+import { notifyAuditReady, telegramNotifyErrorMessage } from "@/services/telegramService";
+import { syncProjectToRemote } from "@/services/projectSyncService";
 
 export function AuditStep({ funnel }: { funnel: Funnel }) {
   const { projectId } = useParams<{ projectId: string }>();
@@ -22,7 +26,10 @@ export function AuditStep({ funnel }: { funnel: Funnel }) {
     funnelMaterials,
     funnelMetricsList,
     setFunnelStep,
+    getProject,
+    store,
   } = useAppData();
+  const { guest } = useAuth();
 
   const materials = funnelMaterials(funnel.id);
   const metrics = funnelMetricsList(funnel.id);
@@ -38,7 +45,11 @@ export function AuditStep({ funnel }: { funnel: Funnel }) {
   );
 
   const [loading, setLoading] = useState(false);
+  const [telegramSending, setTelegramSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const AUDIT_TIMEOUT_MS = 90_000;
 
   const hasMaterials = materials.length > 0 || Boolean(funnel.landingUrl?.trim());
   const hasMetrics = metrics.length > 0;
@@ -50,10 +61,23 @@ export function AuditStep({ funnel }: { funnel: Funnel }) {
   );
 
   useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
     if (snapshot || !canRun) return;
     void handleRun(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [funnel.id]);
+
+  const handleCancel = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setLoading(false);
+    setError("Аудит отменён");
+  };
 
   const handleRun = async (silent = false) => {
     if (!hasMaterials) {
@@ -64,17 +88,90 @@ export function AuditStep({ funnel }: { funnel: Funnel }) {
       toast.error("Добавьте метрики на предыдущем шаге — без цифр аудит не сможет связать проблемы с этапами");
       return;
     }
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    const timeoutId = window.setTimeout(() => controller.abort(), AUDIT_TIMEOUT_MS);
+
     setLoading(true);
     setError(null);
     try {
-      await runFunnelAiAudit(funnel.id);
-      if (!silent) toast.success("AI-аудит готов");
+      const result = await runFunnelAiAudit(funnel.id, controller.signal);
+      if (!result) return;
+
+      const { telegramSent } = result;
+      if (telegramSent > 0) {
+        toast.success(`AI-аудит готов · отправлено в Telegram (${telegramSent})`);
+      } else if (!guest && !silent) {
+        toast.success("AI-аудит готов");
+        toast.info("Telegram: чат не привязан или не удалось отправить");
+      } else if (!silent) {
+        toast.success("AI-аудит готов");
+      } else {
+        toast.success("AI-аудит готов");
+      }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Не удалось выполнить аудит";
-      setError(msg);
-      toast.error(msg);
+      if (controller.signal.aborted) {
+        const msg =
+          abortRef.current === null
+            ? "Аудит отменён"
+            : "Превышено время ожидания (1.5 мин). Попробуйте ещё раз.";
+        setError(msg);
+        if (!silent && abortRef.current !== null) toast.error(msg);
+      } else {
+        const msg = e instanceof Error ? e.message : "Не удалось выполнить аудит";
+        setError(msg);
+        toast.error(msg);
+      }
     } finally {
+      window.clearTimeout(timeoutId);
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
       setLoading(false);
+    }
+  };
+
+  const handleSendTelegram = async () => {
+    const appProjectId = funnel.projectId || projectId;
+    if (!snapshot?.report || !appProjectId || guest) {
+      toast.error("Войдите в аккаунт для отправки в Telegram");
+      return;
+    }
+    const project = getProject(appProjectId);
+    if (!project) {
+      toast.error("Проект не найден");
+      return;
+    }
+    setTelegramSending(true);
+    try {
+      const syncResult = await syncProjectToRemote(project, store);
+      if (!syncResult.ok) {
+        toast.error(`Синхронизация: ${syncResult.error ?? "ошибка"}`);
+        return;
+      }
+
+      const digest = formatAuditDigestTelegram({
+        projectName: project.projectName,
+        funnelName: funnel.productName || "Воронка",
+        typeName: snapshot.funnelTypeName ?? typeTemplate.name,
+        generatedAt: snapshot.generatedAt,
+        report: snapshot.report,
+        metrics,
+        reportUrl: buildAuditReportUrl(appProjectId, funnel.id),
+      });
+      const { ok, sent, reason } = await notifyAuditReady(appProjectId, digest);
+      if (ok && sent > 0) {
+        toast.success(`Отправлено в Telegram (${sent})`);
+      } else if (ok) {
+        toast.error(telegramNotifyErrorMessage("no_linked_chats"));
+      } else {
+        toast.error(telegramNotifyErrorMessage(reason));
+      }
+    } finally {
+      setTelegramSending(false);
     }
   };
 
@@ -109,20 +206,37 @@ export function AuditStep({ funnel }: { funnel: Funnel }) {
               />
             </div>
           </div>
-          <Button
-            size="sm"
-            variant={snapshot && !syncStatus.inSync ? "default" : "outline"}
-            disabled={loading || !canRun}
-            onClick={() => void handleRun()}
-            className={cn(snapshot && !syncStatus.inSync && "bg-gradient-money text-primary-foreground")}
-          >
-            {loading ? (
-              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="mr-1.5 h-4 w-4" />
-            )}
-            {snapshot ? "Обновить" : "Запустить"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {snapshot?.report && !guest ? (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={loading || telegramSending}
+                onClick={() => void handleSendTelegram()}
+              >
+                {telegramSending ? (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <MessageCircle className="mr-1.5 h-4 w-4" />
+                )}
+                Повторить в Telegram
+              </Button>
+            ) : null}
+            <Button
+              size="sm"
+              variant={snapshot && !syncStatus.inSync ? "default" : "outline"}
+              disabled={loading || !canRun}
+              onClick={() => void handleRun()}
+              className={cn(snapshot && !syncStatus.inSync && "bg-gradient-money text-primary-foreground")}
+            >
+              {loading ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-1.5 h-4 w-4" />
+              )}
+              {snapshot ? "Обновить" : "Запустить"}
+            </Button>
+          </div>
         </div>
 
         {!hasMaterials ? (
@@ -152,10 +266,13 @@ export function AuditStep({ funnel }: { funnel: Funnel }) {
               <div className="h-12 w-12 rounded-full border-2 border-primary/20" />
               <Loader2 className="absolute inset-0 m-auto h-6 w-6 animate-spin text-primary" />
             </div>
-            <p className="text-sm font-medium">AI разбирает воронку</p>
+            <p className="text-sm font-medium">Сканируем узкие места</p>
             <p className="text-xs text-muted-foreground text-center max-w-xs">
-              Сопоставление материалов, метрик и этапов · обычно 30–90 сек
+              Метрики и этапы воронки · обычно 15–45 сек
             </p>
+            <Button size="sm" variant="outline" onClick={handleCancel} className="mt-2">
+              Отменить
+            </Button>
           </div>
         ) : null}
 

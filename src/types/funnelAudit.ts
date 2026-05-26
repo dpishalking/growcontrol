@@ -242,4 +242,10 @@ export type FunnelAuditApiPayload = {
     dataSource?: string;
     comment?: string;
   }[];
+  /** Для Telegram-уведомления после аудита (Edge Function). */
+  appProjectId?: string;
+  projectName?: string;
+  funnelName?: string;
+  reportUrl?: string;
+  notifyTelegram?: boolean;
 };

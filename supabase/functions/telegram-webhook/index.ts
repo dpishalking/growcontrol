@@ -5,6 +5,7 @@ interface TelegramUser {
   id: number;
   first_name?: string;
   username?: string;
+  is_bot?: boolean;
 }
 
 interface TelegramChat {
@@ -20,9 +21,18 @@ interface TelegramMessage {
   from?: TelegramUser;
 }
 
+interface ChatMemberUpdate {
+  chat: TelegramChat;
+  new_chat_member: {
+    user: TelegramUser;
+    status: string;
+  };
+}
+
 interface TelegramUpdate {
   update_id: number;
   message?: TelegramMessage;
+  my_chat_member?: ChatMemberUpdate;
 }
 
 serve(async (req) => {
@@ -32,8 +42,13 @@ serve(async (req) => {
 
   try {
     const update: TelegramUpdate = await req.json();
-    const message = update.message;
 
+    if (update.my_chat_member) {
+      await handleBotAdded(update.my_chat_member);
+      return new Response("ok");
+    }
+
+    const message = update.message;
     if (!message?.text || !message.chat) {
       return new Response("ok");
     }
@@ -55,6 +70,35 @@ serve(async (req) => {
   }
 });
 
+async function handleBotAdded(event: ChatMemberUpdate): Promise<void> {
+  const { chat, new_chat_member } = event;
+  if (!new_chat_member.user.is_bot) return;
+
+  const chatType = chat.type;
+  if (chatType !== "group" && chatType !== "supergroup") return;
+
+  const status = new_chat_member.status;
+  if (status !== "member" && status !== "administrator") return;
+
+  const chatId = String(chat.id);
+  const title = chat.title ?? "командный чат";
+
+  await sendTelegramMessage(
+    chatId,
+    [
+      `<b>GrowControl подключён к чату «${escapeHtml(title)}»</b>`,
+      ``,
+      `Чтобы получать уведомления о тестах и метриках:`,
+      ``,
+      `1. Откройте GrowControl → проект → «Подключить Telegram»`,
+      `2. Скопируйте код`,
+      `3. Напишите здесь: <code>/connect КОД</code>`,
+      ``,
+      `<code>/help</code> — все команды`,
+    ].join("\n"),
+  );
+}
+
 async function handleCommand(
   text: string,
   chatId: string,
@@ -62,25 +106,25 @@ async function handleCommand(
   chatType: string,
 ): Promise<string | null> {
   const service = createServiceClient();
+  const isGroup = chatType === "group" || chatType === "supergroup";
 
-  // /start connect_CODE (deep link из приложения)
   if (text.startsWith("/start")) {
     const parts = text.split(/\s+/);
     const payload = parts[1] ?? "";
     if (payload.startsWith("connect_")) {
       const code = payload.replace("connect_", "");
-      return linkChat(service, code, chatId, chatTitle, chatType);
+      return linkChat(service, code, chatId, chatTitle, chatType, isGroup);
     }
-    return helpText();
+    return helpText(isGroup);
   }
 
   if (text.startsWith("/connect")) {
     const parts = text.split(/\s+/);
     const code = parts[1]?.trim();
     if (!code) {
-      return "Укажите код: <code>/connect ABC123</code>\n\nКод можно получить в GrowControl → проект → «Подключить Telegram».";
+      return connectHelpText(isGroup);
     }
-    return linkChat(service, code, chatId, chatTitle, chatType);
+    return linkChat(service, code, chatId, chatTitle, chatType, isGroup);
   }
 
   if (text.startsWith("/disconnect")) {
@@ -108,16 +152,17 @@ async function handleCommand(
     }
     const result = data as { linked?: boolean; project_name?: string; linked_at?: string };
     if (!result?.linked) {
-      return "Чат не привязан.\n\nЧтобы подключить: получите код в GrowControl и напишите <code>/connect КОД</code>.";
+      return connectHelpText(isGroup);
     }
     const linkedAt = result.linked_at
       ? new Date(result.linked_at).toLocaleDateString("ru-RU")
       : "—";
-    return `Привязан к проекту: <b>${escapeHtml(result.project_name ?? "")}</b>\nПодключён: ${linkedAt}`;
+    const chatLabel = isGroup ? "Командный чат" : "Чат";
+    return `${chatLabel} привязан к проекту: <b>${escapeHtml(result.project_name ?? "")}</b>\nПодключён: ${linkedAt}`;
   }
 
   if (text.startsWith("/help")) {
-    return helpText();
+    return helpText(isGroup);
   }
 
   return null;
@@ -129,6 +174,7 @@ async function linkChat(
   chatId: string,
   chatTitle: string | null,
   chatType: string,
+  isGroup: boolean,
 ): Promise<string> {
   const { data, error } = await service.rpc("link_telegram_chat_by_code", {
     p_code: code,
@@ -140,7 +186,14 @@ async function linkChat(
   if (error) {
     const msg = error.message ?? "";
     if (msg.includes("invalid_or_expired_code")) {
-      return "Код недействителен или истёк.\n\nСгенерируйте новый код в GrowControl → проект → «Подключить Telegram».";
+      return [
+        `Код недействителен или истёк.`,
+        ``,
+        `Сгенерируйте новый код в GrowControl → проект → «Подключить Telegram».`,
+        isGroup
+          ? `Затем напишите здесь: <code>/connect НОВЫЙ_КОД</code>`
+          : `Для командного чата добавьте бота в группу и выполните <code>/connect КОД</code> там.`,
+      ].join("\n");
     }
     if (msg.includes("chat_already_linked")) {
       return "Этот чат уже привязан к другому проекту.\n\nСначала напишите <code>/disconnect</code>, затем подключите заново.";
@@ -149,32 +202,80 @@ async function linkChat(
     return "Не удалось привязать чат. Попробуйте позже.";
   }
 
-  const result = data as { project_name?: string };
-  return [
-    `<b>Чат подключён</b>`,
+  const result = data as { project_name?: string; chat_type?: string };
+  const chatLabel = isGroup ? "Командный чат подключён" : "Чат подключён";
+
+  const lines = [
+    `<b>${chatLabel}</b>`,
     ``,
     `Проект: <b>${escapeHtml(result.project_name ?? "")}</b>`,
     ``,
-    `Сюда будут приходить уведомления о запуске тестов и напоминания по метрикам — только по этому проекту.`,
+    `Сюда будут приходить уведомления:`,
+    `• запуск и завершение тестов`,
+    `• дедлайны и просрочки`,
+    `• гипотезы в бэклоге`,
+    `• метрики ниже плана`,
+    `• готовность материалов и устаревший аудит`,
+  ];
+
+  if (!isGroup) {
+    lines.push(
+      ``,
+      `<b>Для командного чата:</b>`,
+      `1. Добавьте @controlgrow_bot в группу`,
+      `2. Тот же код (или новый из GrowControl) → <code>/connect ${escapeHtml(code)}</code> в группе`,
+    );
+  }
+
+  lines.push(
     ``,
     `<code>/status</code> — проверить привязку`,
     `<code>/disconnect</code> — отключить`,
+  );
+
+  return lines.join("\n");
+}
+
+function connectHelpText(isGroup: boolean): string {
+  if (isGroup) {
+    return [
+      `Чтобы подключить этот командный чат:`,
+      ``,
+      `1. GrowControl → проект → «Подключить Telegram»`,
+      `2. Скопируйте код`,
+      `3. Напишите: <code>/connect КОД</code>`,
+    ].join("\n");
+  }
+  return [
+    `Чат не привязан.`,
+    ``,
+    `GrowControl → проект → «Подключить Telegram» → код → <code>/connect КОД</code>`,
+    ``,
+    `Для командного чата добавьте бота в группу и выполните команду там.`,
   ].join("\n");
 }
 
-function helpText(): string {
-  return [
+function helpText(isGroup: boolean): string {
+  const lines = [
     `<b>GrowControl Bot</b>`,
     ``,
-    `Подключает командный чат к проекту в GrowControl.`,
+    isGroup
+      ? `Подключает этот командный чат к проекту в GrowControl.`
+      : `Подключает чат к проекту в GrowControl.`,
     ``,
     `<code>/connect КОД</code> — привязать чат к проекту`,
     `<code>/status</code> — какой проект привязан`,
     `<code>/disconnect</code> — отвязать чат`,
     `<code>/help</code> — эта справка`,
     ``,
-    `Код получите в приложении: проект → «Подключить Telegram».`,
-  ].join("\n");
+    `Код: GrowControl → проект → «Подключить Telegram».`,
+  ];
+
+  if (!isGroup) {
+    lines.push(``, `Для команды: добавьте бота в групповой чат → <code>/connect КОД</code> там.`);
+  }
+
+  return lines.join("\n");
 }
 
 function escapeHtml(text: string): string {

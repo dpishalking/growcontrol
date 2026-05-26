@@ -229,6 +229,100 @@
     border-radius: 9999px;
     background: radial-gradient(circle, hsl(var(--primary) / 0.12) 0%, transparent 70%);
   }
+
+  /* ── Dashboard Command Center ── */
+  .dashboard-cockpit {
+    position: relative;
+  }
+
+  .dashboard-cockpit::before {
+    content: "";
+    position: absolute;
+    inset: -40px -20px auto;
+    height: 280px;
+    background: radial-gradient(
+      ellipse 80% 100% at 50% 0%,
+      hsl(var(--primary) / 0.12) 0%,
+      transparent 70%
+    );
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .dashboard-frame-glow::after {
+    content: "";
+    position: absolute;
+    inset: 8px;
+    border-radius: 1.25rem;
+    background: radial-gradient(
+      ellipse at 50% 0%,
+      hsl(var(--primary) / 0.15) 0%,
+      transparent 65%
+    );
+    pointer-events: none;
+    z-index: -1;
+    filter: blur(20px);
+  }
+
+  .dashboard-zone-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.625rem;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: hsl(var(--primary-foreground));
+    background: var(--gradient-money);
+    box-shadow: 0 4px 14px -4px hsl(var(--primary) / 0.45);
+  }
+
+  .dashboard-stat-cell {
+    background: hsl(var(--muted) / 0.35);
+    border: 1px solid hsl(var(--border) / 0.8);
+  }
+
+  .dashboard-stat-cell--alert {
+    background: hsl(var(--danger) / 0.08);
+    border-color: hsl(var(--danger) / 0.35);
+  }
+
+  .dashboard-stat-cell--active {
+    background: hsl(var(--success) / 0.08);
+    border-color: hsl(var(--success) / 0.35);
+  }
+
+  .dashboard-cta-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .dashboard-cta-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      105deg,
+      transparent 40%,
+      hsl(0 0% 100% / 0.18) 50%,
+      transparent 60%
+    );
+    transform: translateX(-100%);
+    animation: dashboard-shimmer 3.5s ease-in-out infinite;
+  }
+
+  @keyframes dashboard-shimmer {
+    0%,
+    70%,
+    100% {
+      transform: translateX(-100%);
+    }
+    85% {
+      transform: translateX(100%);
+    }
+  }
 }
 
 @layer utilities {
@@ -470,5 +564,139 @@
     animation: none !important;
     height: auto !important;
     overflow: visible !important;
+  }
+
+  /* ── Overview page ──────────────────────────────────────── */
+  @keyframes overview-rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0);    }
+  }
+
+  .overview-rise {
+    animation: overview-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .overview-hero {
+    background: linear-gradient(
+      180deg,
+      hsl(var(--card) / 0.55) 0%,
+      hsl(var(--background) / 0) 100%
+    );
+    border-bottom: 1px solid hsl(var(--border) / 0.3);
+  }
+
+  .overview-hero-glow {
+    position: absolute;
+    top: -60px;
+    left: -80px;
+    width: 480px;
+    height: 320px;
+    border-radius: 50%;
+    background: radial-gradient(
+      ellipse at center,
+      hsl(var(--primary) / 0.12) 0%,
+      transparent 65%
+    );
+    pointer-events: none;
+    filter: blur(8px);
+  }
+
+  .overview-type-badge {
+    background: hsl(var(--primary) / 0.12);
+    color: hsl(var(--primary));
+    border: 1px solid hsl(var(--primary) / 0.25);
+  }
+
+  .overview-cta {
+    animation: overview-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .overview-progress-track {
+    height: 5px;
+    border-radius: 99px;
+    background: hsl(var(--border) / 0.4);
+    overflow: hidden;
+  }
+
+  .overview-progress-fill {
+    height: 100%;
+    border-radius: 99px;
+    background: var(--gradient-money);
+    transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+    box-shadow: 0 0 8px hsl(var(--primary) / 0.4);
+  }
+
+  .overview-stat-card {
+    background: linear-gradient(
+      145deg,
+      hsl(var(--card) / 0.8) 0%,
+      hsl(var(--card) / 0.5) 100%
+    );
+    border: 1px solid hsl(var(--border) / 0.5);
+    box-shadow:
+      0 1px 0 hsl(var(--foreground) / 0.04) inset,
+      0 8px 24px -12px hsl(0 0% 0% / 0.4);
+    backdrop-filter: blur(8px);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .overview-stat-card:hover {
+      transform: translateY(-2px);
+      border-color: hsl(var(--primary) / 0.25);
+      box-shadow:
+        0 1px 0 hsl(var(--foreground) / 0.06) inset,
+        0 12px 32px -8px hsl(var(--primary) / 0.15);
+    }
+  }
+
+  .overview-bottleneck {
+    background: linear-gradient(
+      135deg,
+      hsl(var(--destructive) / 0.08) 0%,
+      hsl(var(--destructive) / 0.03) 100%
+    );
+    border: 1px solid hsl(var(--destructive) / 0.3);
+    box-shadow: 0 0 0 1px hsl(var(--destructive) / 0.06) inset;
+  }
+
+  .overview-bottleneck-icon {
+    background: hsl(var(--destructive) / 0.12);
+    border: 1px solid hsl(var(--destructive) / 0.25);
+  }
+
+  .overview-hypo-card {
+    background: linear-gradient(
+      145deg,
+      hsl(var(--card) / 0.75) 0%,
+      hsl(var(--card) / 0.45) 100%
+    );
+    backdrop-filter: blur(8px);
+    box-shadow: 0 4px 16px -8px hsl(0 0% 0% / 0.35);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .overview-hypo-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px -8px hsl(0 0% 0% / 0.45);
+    }
+  }
+
+  .overview-empty-state {
+    background: hsl(var(--card) / 0.4);
+    border: 1px dashed hsl(var(--border) / 0.5);
+  }
+
+  .overview-quick-action {
+    background: hsl(var(--card) / 0.45);
+    border: 1px solid hsl(var(--border) / 0.4);
+    backdrop-filter: blur(6px);
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .overview-quick-action:hover {
+      background: hsl(var(--card) / 0.7);
+      border-color: hsl(var(--primary) / 0.3);
+      transform: translateY(-1px);
+    }
   }
 }

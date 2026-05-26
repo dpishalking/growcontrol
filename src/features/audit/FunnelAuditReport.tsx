@@ -199,8 +199,8 @@ export function FunnelAuditReport({
       <Tabs value={tab} onValueChange={setTab} className="space-y-4">
         <h3 className="mx-auto max-w-2xl px-1 text-center font-display text-lg sm:text-xl font-semibold leading-snug tracking-tight text-foreground">
           Выявили{" "}
-          <span className="bg-gradient-money bg-clip-text text-transparent">ключевые слабые звенья</span>{" "}
-          в воронке на основе анализа смыслов и метрик, которые вы предоставили
+          <span className="bg-gradient-money bg-clip-text text-transparent">узкие места</span>{" "}
+          по метрикам и этапам воронки — главные ошибки конверсии
         </h3>
         <TabsList className="grid w-full grid-cols-2 h-9">
           <TabsTrigger value="overview" className="text-xs sm:text-sm">

@@ -55,7 +55,7 @@ import {
   type CreateFindingInput,
 } from "@/services/auditService";
 import {
-  createFunnelMetric,
+  getMetricById,
   getMetricsByFunnel,
   recomputeAllFunnelMetrics,
   removeFunnelMetric,
@@ -119,8 +119,22 @@ import type { FunnelStageDefinition, FunnelTypeId } from "@/types/funnelType";
 import { loadStore, saveStore, setStorageScope, type MockStore } from "@/services/storage";
 import { useAuth } from "@/hooks/useAuth";
 import { logProjectActivity, resolveProjectIdForFunnel, syncAllProjectsToRemote, syncExperimentToRemote, syncProjectToRemote } from "@/services/projectSyncService";
-import { notifyTestStarted } from "@/services/telegramService";
+import { notifyAuditReady, notifyTestStarted } from "@/services/telegramService";
+import {
+  isMaterialsChecklistComplete,
+  maybeNotifyAuditStale,
+  maybeNotifyHypothesisBacklog,
+  maybeNotifyMaterialsComplete,
+  maybeNotifyMetricRed,
+  maybeNotifyTestFinished,
+} from "@/services/telegramNotifyHooks";
+import { buildAuditReportUrl, formatAuditDigestTelegram } from "@/lib/telegramAuditFormat";
 import { BILLING_ENABLED } from "@/lib/productFlags";
+
+export type FunnelAiAuditResult = {
+  snapshot: FunnelAuditSnapshot;
+  telegramSent: number;
+};
 
 type AppDataContextValue = {
   store: MockStore;
@@ -177,7 +191,7 @@ type AppDataContextValue = {
   addFinding: (input: CreateFindingInput) => AuditFinding;
   deleteFinding: (id: string) => boolean;
   runAudit: (funnelId: string) => AuditFinding[];
-  runFunnelAiAudit: (funnelId: string) => Promise<FunnelAuditSnapshot | null>;
+  runFunnelAiAudit: (funnelId: string, signal?: AbortSignal) => Promise<FunnelAiAuditResult | null>;
   funnelAuditSnapshot: (funnelId: string) => FunnelAuditSnapshot | null;
   importAuditHypotheses: (funnelId: string) => Hypothesis[];
   importAuditHypothesesDrafts: (funnelId: string, drafts: FunnelAuditHypothesisDraft[]) => Hypothesis[];
@@ -311,6 +325,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AppDataContextValue>(() => {
     const maxProjects = getMaxProjectsForPlan(store.user.plan);
+    const telegramEnabled = !guest && Boolean(scopeUserId);
 
     return {
       store,
@@ -426,18 +441,39 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       // Materials
       funnelMaterials: (id) => getMaterialsByFunnel(store, id),
       addMaterial: (input) => {
+        const wasComplete = isMaterialsChecklistComplete(input.funnelId, store);
         const m = createMaterial(store, input);
         persist(store);
+        maybeNotifyMaterialsComplete(store, input.funnelId, wasComplete, telegramEnabled);
+        maybeNotifyAuditStale(store, input.funnelId, telegramEnabled);
         return m;
       },
       patchMaterial: (id, patch) => {
+        const existing = store.materials.find((x) => x.id === id);
+        const funnelId = existing?.funnelId;
+        const wasComplete = funnelId ? isMaterialsChecklistComplete(funnelId, store) : false;
         const m = updateMaterial(store, id, patch);
-        if (m) persist(store);
+        if (m) {
+          persist(store);
+          if (funnelId) {
+            maybeNotifyMaterialsComplete(store, funnelId, wasComplete, telegramEnabled);
+            maybeNotifyAuditStale(store, funnelId, telegramEnabled);
+          }
+        }
         return m;
       },
       deleteMaterial: (id) => {
+        const existing = store.materials.find((x) => x.id === id);
+        const funnelId = existing?.funnelId;
+        const wasComplete = funnelId ? isMaterialsChecklistComplete(funnelId, store) : false;
         const ok = removeMaterial(store, id);
-        if (ok) persist(store);
+        if (ok) {
+          persist(store);
+          if (funnelId) {
+            maybeNotifyMaterialsComplete(store, funnelId, wasComplete, telegramEnabled);
+            maybeNotifyAuditStale(store, funnelId, telegramEnabled);
+          }
+        }
         return ok;
       },
 
@@ -458,14 +494,34 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         persist(store);
         return findings;
       },
-      runFunnelAiAudit: async (funnelId) => {
+      runFunnelAiAudit: async (funnelId, signal) => {
         recomputeAllFunnelMetrics(store, funnelId);
-        const payload = buildFunnelAuditPayload(store, funnelId);
-        if (!payload) return null;
+        const basePayload = buildFunnelAuditPayload(store, funnelId);
+        if (!basePayload) return null;
         const funnel = getFunnelById(store, funnelId);
         if (!funnel) return null;
 
-        const { audit } = await runFunnelAuditApi(payload);
+        const appProjectId = !guest && scopeUserId ? resolveProjectIdForFunnel(store, funnelId) : null;
+        const project = appProjectId ? getProjectById(store, appProjectId) : null;
+
+        if (appProjectId && project) {
+          await syncProjectToRemote(project, store);
+        }
+
+        const payload = {
+          ...basePayload,
+          ...(appProjectId && project
+            ? {
+                appProjectId,
+                projectName: project.projectName,
+                funnelName: funnel.productName || "Воронка",
+                reportUrl: buildAuditReportUrl(appProjectId, funnelId),
+                notifyTelegram: true,
+              }
+            : {}),
+        };
+
+        const { audit, telegramSent: serverTelegramSent } = await runFunnelAuditApi(payload, signal);
         const report = normalizeFunnelAudit(audit);
         const typeTemplate = getFunnelTypeTemplate(funnel.funnelTypeId ?? "service_lead");
         const materials = getMaterialsByFunnel(store, funnelId);
@@ -481,7 +537,28 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         saveFunnelAuditSnapshot(store, funnelId, snapshot);
         runMockAudit(store, funnelId);
         persist(store);
-        return snapshot;
+
+        let telegramSent = serverTelegramSent ?? 0;
+
+        if (telegramSent === 0 && appProjectId && project && !guest) {
+          const digest = formatAuditDigestTelegram({
+            projectName: project.projectName,
+            funnelName: funnel.productName || "Воронка",
+            typeName: typeTemplate.name,
+            generatedAt: snapshot.generatedAt,
+            report,
+            metrics,
+            reportUrl: buildAuditReportUrl(appProjectId, funnelId),
+          });
+          const retry = await notifyAuditReady(appProjectId, digest);
+          if (retry.ok) telegramSent = retry.sent;
+        }
+
+        if (appProjectId && project) {
+          syncProjectForFunnel(funnelId, store);
+        }
+
+        return { snapshot, telegramSent };
       },
       funnelAuditSnapshot: (funnelId) => {
         const f = getFunnelById(store, funnelId);
@@ -516,16 +593,29 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       addFunnelMetric: (input) => {
         const m = createFunnelMetric(store, input);
         persist(store);
+        maybeNotifyMetricRed(store, input.funnelId, null, m, telegramEnabled);
+        maybeNotifyAuditStale(store, input.funnelId, telegramEnabled);
         return m;
       },
       patchFunnelMetric: (id, patch) => {
+        const before = getMetricById(store, id);
         const m = updateFunnelMetric(store, id, patch);
-        if (m) persist(store);
+        if (m) {
+          persist(store);
+          if (before) {
+            maybeNotifyMetricRed(store, m.funnelId, before, m, telegramEnabled);
+            maybeNotifyAuditStale(store, m.funnelId, telegramEnabled);
+          }
+        }
         return m;
       },
       deleteFunnelMetric: (id) => {
+        const before = getMetricById(store, id);
         const ok = removeFunnelMetric(store, id);
-        if (ok) persist(store);
+        if (ok) {
+          persist(store);
+          if (before) maybeNotifyAuditStale(store, before.funnelId, telegramEnabled);
+        }
         return ok;
       },
 
@@ -554,6 +644,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         if (h) {
           persist(store);
           syncProjectForFunnel(h.funnelId ?? before?.funnelId ?? "", store);
+          if (
+            telegramEnabled &&
+            status === "backlog" &&
+            before?.status !== "backlog"
+          ) {
+            maybeNotifyHypothesisBacklog(
+              store,
+              h.funnelId,
+              h.metricId,
+              [h],
+              true,
+            );
+          }
         }
         return h;
       },
@@ -602,6 +705,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         finalizeHypothesisSelection(store, funnelId, metricId, selectedIds, patches);
         persist(store);
         syncProjectForFunnel(funnelId, store);
+        if (telegramEnabled && selectedIds.length > 0) {
+          const selected = selectedIds
+            .map((id) => getHypothesisById(store, id))
+            .filter((h): h is Hypothesis => Boolean(h));
+          maybeNotifyHypothesisBacklog(store, funnelId, metricId, selected, true);
+        }
       },
 
       // Experiments
@@ -635,7 +744,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       },
       finishExperimentAction: (id, afterValue, result, decision) => {
         const e = finishExperiment(store, id, afterValue, result, decision);
-        if (e) persist(store);
+        if (e) {
+          persist(store);
+          if (telegramEnabled) {
+            const projectId = resolveProjectIdForFunnel(store, e.funnelId);
+            if (projectId) {
+              void syncExperimentToRemote(projectId, e).then(() =>
+                maybeNotifyTestFinished(store, e, true),
+              );
+            }
+          }
+        }
         return e;
       },
     };

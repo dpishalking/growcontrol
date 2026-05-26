@@ -1,11 +1,18 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
-  createServiceClient,
   createUserClient,
   formatDateRu,
   requireBotToken,
   sendTelegramMessage,
 } from "../_shared/telegram.ts";
+import {
+  formatAuditStaleTelegram,
+  formatHypothesisBacklogTelegram,
+  formatMaterialsCompleteTelegram,
+  formatMetricRedTelegram,
+  formatTestFinishedTelegram,
+  formatTestStartedTelegram,
+} from "../_shared/telegramMessageFormat.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,42 +36,147 @@ interface ExperimentPayload {
   startDate: string | null;
   endDate: string | null;
   budget?: string;
+  beforeValue?: string;
+  afterValue?: string;
+  result?: string;
+  decision?: string;
 }
 
-interface NotifyBody {
-  event: "test_started";
-  appProjectId: string;
-  hypothesis: HypothesisPayload;
-  experiment: ExperimentPayload;
-  projectName: string;
-}
+type NotifyBody =
+  | {
+      event: "test_started";
+      appProjectId: string;
+      hypothesis: HypothesisPayload;
+      experiment: ExperimentPayload;
+      projectName: string;
+    }
+  | {
+      event: "test_finished";
+      appProjectId: string;
+      projectName: string;
+      funnelName?: string;
+      hypothesis: HypothesisPayload;
+      experiment: ExperimentPayload;
+    }
+  | {
+      event: "hypothesis_backlog";
+      appProjectId: string;
+      projectName: string;
+      funnelName: string;
+      metricName: string;
+      items: { title: string; priorityScore?: number }[];
+    }
+  | {
+      event: "metric_red";
+      appProjectId: string;
+      projectName: string;
+      funnelName: string;
+      metricName: string;
+      actualValue?: string | null;
+      plannedValue?: string | null;
+      achievementPercent?: number | null;
+    }
+  | {
+      event: "materials_complete";
+      appProjectId: string;
+      projectName: string;
+      funnelName: string;
+      covered: number;
+      total: number;
+      auditUrl?: string;
+    }
+  | {
+      event: "audit_stale";
+      appProjectId: string;
+      projectName: string;
+      funnelName: string;
+      changes: string[];
+      auditUrl?: string;
+    }
+  | {
+      event: "audit_ready";
+      appProjectId: string;
+      text: string;
+    };
 
-function buildMessage(body: NotifyBody): string {
-  const { hypothesis: h, experiment: e, projectName } = body;
+const ALLOWED_EVENTS = new Set([
+  "test_started",
+  "test_finished",
+  "hypothesis_backlog",
+  "metric_red",
+  "materials_complete",
+  "audit_stale",
+  "audit_ready",
+]);
 
-  const lines: string[] = [
-    `<b>Тест запущен</b>`,
-    ``,
-    `<b>${escapeHtml(h.title)}</b>`,
-    ``,
-    `Если ${escapeHtml(h.ifChange)}, то ${escapeHtml(h.thenMetric)}`,
-    ``,
-    `Метрика: ${escapeHtml(h.metricName || "—")}`,
-    `Этап воронки: ${escapeHtml(h.funnelStage || "—")}`,
-    `Дедлайн: ${formatDateRu(e.endDate)}`,
-    e.owner ? `Владелец: ${escapeHtml(e.owner)}` : null,
-    e.budget ? `Бюджет: ${escapeHtml(e.budget)}` : null,
-    `Проект: ${escapeHtml(projectName)}`,
-  ];
-
-  return lines.filter((l): l is string => l !== null).join("\n");
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+function buildMessage(body: NotifyBody): string | null {
+  switch (body.event) {
+    case "audit_ready": {
+      const text = body.text?.trim();
+      return text || null;
+    }
+    case "test_started": {
+      const { hypothesis: h, experiment: e, projectName } = body;
+      return formatTestStartedTelegram({
+        projectName,
+        title: h.title,
+        ifChange: h.ifChange,
+        thenMetric: h.thenMetric,
+        metricName: h.metricName,
+        funnelStage: h.funnelStage,
+        endDate: formatDateRu(e.endDate),
+        owner: e.owner,
+        budget: e.budget,
+      });
+    }
+    case "test_finished": {
+      const { hypothesis: h, experiment: e, projectName, funnelName } = body;
+      return formatTestFinishedTelegram({
+        projectName,
+        funnelName,
+        title: h.title,
+        metricName: h.metricName,
+        beforeValue: e.beforeValue ?? "",
+        afterValue: e.afterValue ?? "",
+        result: e.result ?? "",
+        decision: e.decision ?? "pending",
+        owner: e.owner,
+      });
+    }
+    case "hypothesis_backlog":
+      return formatHypothesisBacklogTelegram({
+        projectName: body.projectName,
+        funnelName: body.funnelName,
+        metricName: body.metricName,
+        items: body.items,
+      });
+    case "metric_red":
+      return formatMetricRedTelegram({
+        projectName: body.projectName,
+        funnelName: body.funnelName,
+        metricName: body.metricName,
+        actualValue: body.actualValue,
+        plannedValue: body.plannedValue,
+        achievementPercent: body.achievementPercent,
+      });
+    case "materials_complete":
+      return formatMaterialsCompleteTelegram({
+        projectName: body.projectName,
+        funnelName: body.funnelName,
+        covered: body.covered,
+        total: body.total,
+        auditUrl: body.auditUrl,
+      });
+    case "audit_stale":
+      return formatAuditStaleTelegram({
+        projectName: body.projectName,
+        funnelName: body.funnelName,
+        changes: body.changes,
+        auditUrl: body.auditUrl,
+      });
+    default:
+      return null;
+  }
 }
 
 serve(async (req) => {
@@ -86,10 +198,14 @@ serve(async (req) => {
       return json({ ok: false, reason: "not_configured" });
     }
 
-    const body: NotifyBody = await req.json();
+    const body = (await req.json()) as NotifyBody;
 
-    if (body.event !== "test_started" || !body.appProjectId) {
+    if (!body.appProjectId || !body.event) {
       return json({ ok: false, reason: "invalid_payload" }, 400);
+    }
+
+    if (!ALLOWED_EVENTS.has(body.event)) {
+      return json({ ok: false, reason: "unknown_event" }, 400);
     }
 
     const userClient = createUserClient(authHeader);
@@ -98,34 +214,23 @@ serve(async (req) => {
       return json({ ok: false, reason: "unauthorized" }, 401);
     }
 
-    const serviceClient = createServiceClient();
-
-    // Проверяем, что проект принадлежит пользователю
-    const { data: project } = await serviceClient
-      .from("projects")
-      .select("id, name, app_id")
-      .eq("app_id", body.appProjectId)
-      .eq("user_id", userData.user.id)
-      .maybeSingle();
-
-    if (!project) {
-      return json({ ok: false, reason: "project_not_found" }, 403);
-    }
-
-    // Ищем привязанные чаты этого проекта
-    const { data: chatIds, error: chatsError } = await serviceClient.rpc(
-      "get_telegram_chats_for_project",
+    const { data: chatsRaw, error: chatsError } = await userClient.rpc(
+      "get_project_telegram_chats",
       { p_app_id: body.appProjectId },
     );
 
     if (chatsError) {
-      console.error("telegram-notify: failed to load chats", chatsError);
-      return json({ ok: false, reason: "db_error" }, 500);
+      console.error("telegram-notify: get_project_telegram_chats", chatsError);
+      const msg = chatsError.message ?? "";
+      if (msg.includes("not authenticated")) {
+        return json({ ok: false, reason: "unauthorized" }, 401);
+      }
+      return json({ ok: false, reason: "project_not_found" }, 403);
     }
 
-    const targets: string[] = Array.isArray(chatIds) ? chatIds : [];
+    const chats = (Array.isArray(chatsRaw) ? chatsRaw : []) as { chat_id?: string }[];
+    const targets: string[] = chats.map((c) => c.chat_id).filter((id): id is string => Boolean(id));
 
-    // Fallback: глобальный чат для внутренней команды (опционально)
     const fallbackChatId = Deno.env.get("TELEGRAM_CHAT_ID")?.trim();
     if (targets.length === 0 && fallbackChatId) {
       targets.push(fallbackChatId);
@@ -136,11 +241,19 @@ serve(async (req) => {
     }
 
     const text = buildMessage(body);
-    let sent = 0;
+    if (!text) {
+      return json({ ok: false, reason: "empty_message" }, 400);
+    }
 
+    let sent = 0;
     for (const chatId of targets) {
       const result = await sendTelegramMessage(chatId, text, botToken);
       if (result.ok) sent++;
+      else console.warn("telegram-notify: send failed", chatId, result.detail);
+    }
+
+    if (sent === 0) {
+      return json({ ok: false, reason: "telegram_send_failed", sent: 0 }, 502);
     }
 
     return json({ ok: true, sent, total: targets.length });
