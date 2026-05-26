@@ -77,6 +77,7 @@ export function PlanStep({ funnel }: { funnel: Funnel }) {
   const { projectId } = useParams<{ projectId: string }>();
   const nav = useNavigate();
   const {
+    funnelHypotheses,
     funnelMetricsList,
     funnelExperiments,
     experimentByHypothesis,
