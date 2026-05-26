@@ -1,14 +1,32 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { funnelTypeAuditRules } from "../_shared/funnelTypeAuditRules.ts";
+import { formatAuditEvidenceBlock } from "../_shared/metricHypothesesEvidence.ts";
+import { METRIC_HYPOTHESES_DIAGNOSE_SCHEMA } from "../_shared/metricHypothesesDiagnoseSchema.ts";
 import { METRIC_HYPOTHESES_GEMINI_SCHEMA } from "../_shared/metricHypothesesGeminiSchema.ts";
-import { geminiFlashModel, geminiJsonResponse, type GeminiPart } from "../_shared/gemini.ts";
+import {
+  METRIC_HYPOTHESES_DIAGNOSE_SYSTEM,
+  METRIC_HYPOTHESES_PROMPT_VERSION,
+  METRIC_HYPOTHESES_SYSTEM_V3,
+} from "../_shared/metricHypothesesSystemPrompt.ts";
+import { validateMetricHypotheses } from "../_shared/metricHypothesesValidate.ts";
+import {
+  geminiFlashModel,
+  geminiJsonResponse,
+  geminiProModel,
+  type GeminiPart,
+} from "../_shared/gemini.ts";
 
-const PROMPT_VERSION = "metric-hypotheses-v1";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+function hypothesesModel(): string {
+  const override = Deno.env.get("GEMINI_HYPOTHESES_MODEL")?.trim();
+  if (override) return override;
+  return geminiProModel();
+}
 
 function buildGeminiErrorResponse(msg: string): Response {
   const m = msg;
@@ -42,6 +60,7 @@ function buildFunnelBrief(funnel: Record<string, unknown>): string {
     `Тип: ${funnel.typeName ?? typeId ?? "—"}`,
     funnel.exampleFlow ? `Цепочка: ${funnel.exampleFlow}` : "",
     `Продукт: ${funnel.productName ?? "—"}`,
+    funnel.productDescription ? `Описание: ${funnel.productDescription}` : "",
     `Трафик: ${funnel.trafficSource ?? "—"}`,
     `ЦА: ${funnel.targetAudience ?? "—"}`,
     `Цель: ${funnel.funnelGoal ?? "—"}`,
@@ -52,12 +71,77 @@ function buildFunnelBrief(funnel: Record<string, unknown>): string {
     .join("\n");
 }
 
+type DiagnoseResult = {
+  causes: { cause: string; evidence: string }[];
+  levers: { channel: string; element: string; rationale: string }[];
+  lowEvidence?: boolean;
+};
+
+async function runDiagnose(
+  systemBrief: string,
+  evidenceBlock: string,
+  metricName: string,
+  metricFacts: string,
+): Promise<DiagnoseResult | null> {
+  try {
+    const userText = [
+      `Целевая метрика: «${metricName}».`,
+      metricFacts,
+      "",
+      "## ВОРОНКА",
+      systemBrief,
+      "",
+      "## EVIDENCE",
+      evidenceBlock,
+      "",
+      "Извлеки 2–4 причины и 3–5 разных рычагов воздействия.",
+    ].join("\n");
+
+    const raw = await geminiJsonResponse({
+      model: geminiFlashModel(),
+      systemInstruction: METRIC_HYPOTHESES_DIAGNOSE_SYSTEM,
+      userParts: [{ text: userText }],
+      responseSchema: METRIC_HYPOTHESES_DIAGNOSE_SCHEMA as unknown as Record<string, unknown>,
+      temperature: 0.3,
+      maxOutputTokens: 2048,
+    });
+    const data = raw as DiagnoseResult;
+    if (!Array.isArray(data?.causes) || !Array.isArray(data?.levers)) return null;
+    return data;
+  } catch (err) {
+    console.warn("diagnose step failed, continue without:", err);
+    return null;
+  }
+}
+
+function formatDiagnose(d: DiagnoseResult | null): string {
+  if (!d) return "Диагноз не получен — опирайся на evidence и playbook.";
+  const causes = d.causes
+    .slice(0, 4)
+    .map((c, i) => `${i + 1}. ${c.cause} — evidence: ${c.evidence}`)
+    .join("\n");
+  const levers = d.levers
+    .slice(0, 5)
+    .map((l, i) => `${i + 1}. [${l.channel}] ${l.element} — ${l.rationale}`)
+    .join("\n");
+  return [
+    "ПРИЧИНЫ ПРОСАДКИ МЕТРИКИ:",
+    causes || "—",
+    "",
+    "РЕКОМЕНДОВАННЫЕ РЫЧАГИ:",
+    levers || "—",
+    d.lowEvidence ? "\n⚠ low_evidence: данных мало, понижай confidence." : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { funnel, metric, materials, existingHypotheses, auditSummary } = body as Record<
+    const { funnel, metric, materials, existingHypotheses, auditContext } = body as Record<
       string,
       unknown
     >;
@@ -95,6 +179,10 @@ serve(async (req) => {
     const ach =
       m.achievementPercent != null ? `${Math.round(Number(m.achievementPercent))}%` : "—";
 
+    const materialTitles = mats
+      .map((raw) => String((raw as Record<string, unknown>).title ?? "").trim())
+      .filter(Boolean);
+
     const materialsBlock =
       mats.length === 0
         ? "Материалы не переданы — опирайся на контекст воронки."
@@ -111,62 +199,97 @@ serve(async (req) => {
         ? existing.map((t, i) => `${i + 1}. ${t}`).join("\n")
         : "Пока нет — можно любые новые идеи.";
 
-    const userText = [
-      "Сгенерируй 3–5 НОВЫХ гипотез для роста ОДНОЙ метрики воронки.",
-      "",
-      "ЖЁСТКИЕ ПРАВИЛА:",
-      `1) Каждая гипотеза должна улучшать ТОЛЬКО метрику «${metricName}» — не CR продаж, не другие KPI.`,
-      "2) Не повторяй и не перефразируй уже существующие гипотезы из списка ниже.",
-      "3) Формулировки на русском, конкретные, проверяемые за 7–14 дней.",
-      "4) Разные каналы: креатив, страница, оффер, скрипт, цепочка писем и т.д.",
-      "",
-      buildFunnelBrief(funnel as Record<string, unknown>),
-      "",
-      "ЦЕЛЕВАЯ МЕТРИКА:",
-      `- Название: ${metricName}`,
+    const evidenceBlock = formatAuditEvidenceBlock(
+      auditContext as Parameters<typeof formatAuditEvidenceBlock>[0],
+    );
+
+    const metricFacts = [
       `- Этап: ${m.stage ?? "—"}`,
       `- План: ${plan}${unit} · Факт: ${fact}${unit}`,
       `- Статус: ${m.status ?? "—"} · Достижение: ${ach}`,
       `- Направление: ${m.direction ?? "higher_better"}`,
       m.comment ? `- Комментарий: ${m.comment}` : "",
-      "",
-      auditSummary ? `КОНТЕКСТ АУДИТА:\n${auditSummary}` : "",
-      "",
-      "УЖЕ ЕСТЬ ГИПОТЕЗЫ (не дублировать):",
-      existingBlock,
-      "",
-      "РЕЛЕВАНТНЫЕ МАТЕРИАЛЫ:",
-      materialsBlock,
     ]
       .filter(Boolean)
       .join("\n");
 
-    const systemInstruction = [
-      "Ты CRO-стратег GrowControl. Генерируешь только проверяемые гипотезы роста.",
-      "Ответ — строго JSON по схеме. Поле hypotheses — массив из 3–5 объектов.",
-      "title — коротко и по делу; expectedImpact — с цифрой именно для целевой метрики.",
+    const funnelBrief = buildFunnelBrief(funnel as Record<string, unknown>);
+
+    // ── Step 1: diagnose (Flash, cheap) ──────────────────────────
+    const diagnose = await runDiagnose(funnelBrief, evidenceBlock, metricName, metricFacts);
+    const diagnoseBlock = formatDiagnose(diagnose);
+
+    // ── Step 2: generate (Pro, expensive) ────────────────────────
+    const userText = [
+      `Сгенерируй 3–5 НОВЫХ гипотез для роста ОДНОЙ метрики: «${metricName}».`,
+      "Опирайся на диагноз ниже. Подбирай рычаги из METRIC PLAYBOOK по типу метрики.",
+      "",
+      "## ВОРОНКА",
+      funnelBrief,
+      "",
+      "## ЦЕЛЕВАЯ МЕТРИКА",
+      `- Название: ${metricName}`,
+      metricFacts,
+      "",
+      "## ДИАГНОЗ (от шага 1)",
+      diagnoseBlock,
+      "",
+      "## EVIDENCE",
+      evidenceBlock,
+      "",
+      "## УЖЕ ЕСТЬ ГИПОТЕЗЫ (не дублировать)",
+      existingBlock,
+      "",
+      "## МАТЕРИАЛЫ (используй ТОЛЬКО эти названия в materialsToChange)",
+      materialTitles.length > 0 ? `Доступные: ${materialTitles.join(" | ")}` : "Материалы не переданы — opisывай рычаг общими названиями.",
+      "",
+      materialsBlock,
     ].join("\n");
 
     const userParts: GeminiPart[] = [{ text: userText }];
-    const result = await geminiJsonResponse({
-      model: geminiFlashModel(),
-      systemInstruction,
-      userParts,
-      responseSchema: METRIC_HYPOTHESES_GEMINI_SCHEMA as unknown as Record<string, unknown>,
-      temperature: 0.75,
-      maxOutputTokens: 8192,
-    });
+    const model = hypothesesModel();
 
-    const hypotheses = (result as { hypotheses?: unknown })?.hypotheses;
-    if (!Array.isArray(hypotheses) || hypotheses.length === 0) {
-      return new Response(JSON.stringify({ error: "AI не вернул гипотезы" }), {
-        status: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    let result: unknown;
+    try {
+      result = await geminiJsonResponse({
+        model,
+        systemInstruction: METRIC_HYPOTHESES_SYSTEM_V3,
+        userParts,
+        responseSchema: METRIC_HYPOTHESES_GEMINI_SCHEMA as unknown as Record<string, unknown>,
+        temperature: 0.4,
+        maxOutputTokens: 8192,
+      });
+    } catch (proErr) {
+      console.warn("Pro hypotheses failed, fallback to flash:", proErr);
+      result = await geminiJsonResponse({
+        model: geminiFlashModel(),
+        systemInstruction: METRIC_HYPOTHESES_SYSTEM_V3,
+        userParts,
+        responseSchema: METRIC_HYPOTHESES_GEMINI_SCHEMA as unknown as Record<string, unknown>,
+        temperature: 0.4,
+        maxOutputTokens: 8192,
       });
     }
 
+    const hypotheses = validateMetricHypotheses(result, metricName, existing, {
+      availableMaterials: materialTitles,
+      allowEmptyMaterials: materialTitles.length === 0,
+    });
+
+    if (hypotheses.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "AI не вернул пригодные гипотезы. Попробуйте ещё раз." }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     return new Response(
-      JSON.stringify({ hypotheses, promptVersion: PROMPT_VERSION }),
+      JSON.stringify({
+        hypotheses,
+        promptVersion: METRIC_HYPOTHESES_PROMPT_VERSION,
+        model,
+        diagnose: diagnose ?? null,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {

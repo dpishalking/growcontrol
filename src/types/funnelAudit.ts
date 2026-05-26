@@ -8,6 +8,18 @@ export type FunnelAuditHypothesisDraft = {
   priority: "high" | "medium" | "low";
   channel: "website" | "funnel" | "sales" | "offer" | "creative" | "research";
   problemIndex?: number;
+  /** v2 super-prompt fields */
+  ifChange?: string;
+  thenMetric?: string;
+  becauseReason?: string;
+  materialsToChange?: string[];
+  testMethod?: string;
+  successCriteria?: string;
+  testDurationDays?: number;
+  impact?: number;
+  confidence?: number;
+  ease?: number;
+  risk?: string;
 };
 
 export type FunnelStageAuditBlock = {

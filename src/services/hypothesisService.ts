@@ -6,6 +6,9 @@ import { getDirectionsForMetricAndType } from "@/data/hypothesisDirections";
 import { getFunnelTypeTemplate } from "@/data/funnelTypes/catalog";
 import { buildHypothesisFromDirection } from "@/lib/buildHypothesisFromDirection";
 import { auditDraftsForMetric } from "@/lib/hypothesisMetricContext";
+import {
+  buildMetricHypothesesAuditContext,
+} from "@/lib/metricHypothesesAuditContext";
 import type { FunnelAuditHypothesisDraft } from "@/types/funnelAudit";
 import type { MetricHypothesesApiPayload } from "@/types/metricHypotheses";
 import { linkHypothesisToMetric } from "./funnelMetricService";
@@ -13,6 +16,7 @@ import { getFunnelById } from "./funnelService";
 import { getMaterialsByFunnel } from "./materialService";
 import { runMetricHypothesesApi } from "./hypothesisAiApi";
 import type { MockStore } from "./storage";
+import { buildDiagnostics } from "@/utils/funnelDiagnostics";
 
 function clamp(v: number | undefined, fallback: number): number {
   if (typeof v !== "number" || Number.isNaN(v)) return fallback;
@@ -212,10 +216,25 @@ export function importHypothesesFromAudit(
   const existing = store.hypotheses.filter((h) => h.funnelId === funnelId);
 
   for (const d of drafts.slice(0, 10)) {
-    const ice = priorityToIce(d.priority);
-    const ifChange = d.title.startsWith("Если")
-      ? d.title
-      : `Если ${d.title.charAt(0).toLowerCase()}${d.title.slice(1)}`;
+    const priorityIce = priorityToIce(d.priority);
+    const ice = d.impact != null && d.confidence != null && d.ease != null
+      ? {
+          impact: Math.max(1, Math.min(5, d.impact)),
+          confidence: Math.max(1, Math.min(5, d.confidence)),
+          ease: Math.max(1, Math.min(5, d.ease)),
+        }
+      : priorityIce;
+
+    const ifChange = d.ifChange?.trim()
+      ? d.ifChange.trim()
+      : d.title.startsWith("Если")
+        ? d.title
+        : `Если ${d.title.charAt(0).toLowerCase()}${d.title.slice(1)}`;
+
+    const thenMetric = d.thenMetric?.trim() || d.expectedImpact;
+    const becauseReason = d.becauseReason?.trim() || d.why;
+    const testMethod = d.testMethod?.trim() || d.testWindow;
+
     if (existing.some((h) => h.title === d.title || h.ifChange === ifChange)) continue;
 
     const stageFromChannel =
@@ -225,6 +244,10 @@ export function importHypothesesFromAudit(
           ? "traffic"
           : metric?.stage ?? "landing";
 
+    const materialsToChange = d.materialsToChange?.length
+      ? d.materialsToChange
+      : inferMaterialsFromAuditDraft(d);
+
     created.push(
       createHypothesis(store, {
         funnelId,
@@ -233,13 +256,14 @@ export function importHypothesesFromAudit(
         funnelStage: stageFromChannel,
         title: d.title,
         ifChange,
-        thenMetric: d.expectedImpact,
-        becauseReason: d.why,
-        whyItShouldWork: d.why,
-        testMethod: d.testWindow,
-        successCriteria: `${d.expectedImpact}. Метрика: ${metric?.name ?? d.metricName}.`,
-        risk: d.guardrail ?? "",
-        materialsToChange: inferMaterialsFromAuditDraft(d),
+        thenMetric,
+        becauseReason,
+        whyItShouldWork: becauseReason,
+        testMethod,
+        successCriteria: d.successCriteria?.trim() || `${thenMetric}. Метрика: ${metric?.name ?? d.metricName}.`,
+        testDurationDays: d.testDurationDays ?? 7,
+        risk: d.risk ?? d.guardrail ?? "",
+        materialsToChange,
         ...ice,
       }),
     );
@@ -290,11 +314,13 @@ export function buildMetricHypothesesPayload(
     .filter(Boolean);
 
   const audit = funnel.auditSnapshot?.report;
-  const auditSummary = audit
-    ? [audit.diagnosis?.mainProblem, audit.diagnosis?.mainMoneyLeak, audit.quickestWin?.action]
-        .filter(Boolean)
-        .join(" · ")
-    : undefined;
+  const metrics = store.funnelMetrics.filter((fm) => fm.funnelId === funnelId);
+  const diag = buildDiagnostics(metrics);
+  const auditContext = buildMetricHypothesesAuditContext(
+    audit,
+    metric,
+    diag.bottleneck?.id ?? null,
+  );
 
   return {
     funnel: {
@@ -328,7 +354,7 @@ export function buildMetricHypothesesPayload(
       extractedText: m.attachment?.extractedText,
     })),
     existingHypotheses: existing,
-    auditSummary,
+    auditContext,
   };
 }
 

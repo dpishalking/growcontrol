@@ -1,3 +1,5 @@
+import type { MetricHypothesesAuditContext } from "@/lib/metricHypothesesAuditContext";
+
 export type MetricHypothesesApiPayload = {
   funnel: {
     typeId: string;
@@ -30,5 +32,7 @@ export type MetricHypothesesApiPayload = {
     extractedText?: string;
   }[];
   existingHypotheses: string[];
+  /** @deprecated use auditContext */
   auditSummary?: string;
+  auditContext?: MetricHypothesesAuditContext;
 };
