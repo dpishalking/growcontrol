@@ -2,6 +2,7 @@ import { getAllStagesForType, getFunnelTypeTemplate } from "@/data/funnelTypes/c
 import { FUNNEL_STAGES, type Funnel } from "@/types/funnel";
 import type { FunnelStageDefinition } from "@/types/funnelType";
 
+/** Этапы карточки воронки и шага «Аудит»: сохранённые этапы пользователя или полный шаблон типа из каталога. */
 export function getStagesForFunnel(funnel: Funnel): FunnelStageDefinition[] {
   if (funnel.stages?.length) return funnel.stages;
   if (funnel.funnelTypeId) {
