@@ -30,6 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { HypothesisStructure } from "@/features/hypotheses/HypothesisStructure";
 import { hypothesisDisplayParts } from "@/lib/hypothesisPresentation";
 import { WizardLayout } from "@/features/wizard/WizardLayout";
+import { useAppData } from "@/context/AppDataContext";
 import { getFunnelTypeTemplate } from "@/data/funnelTypes/catalog";
 import { auditDraftsForMetric } from "@/lib/hypothesisMetricContext";
 import { buildDiagnostics } from "@/utils/funnelDiagnostics";
