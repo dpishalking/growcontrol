@@ -4,6 +4,7 @@ import { getFunnelTypeTemplate } from "@/data/funnelTypes/catalog";
 import { TelegramConnectButton } from "@/features/dashboard/TelegramConnectButton";
 import { useAppData } from "@/context/AppDataContext";
 import { useAuth } from "@/hooks/useAuth";
+import { renderRouteGuard, RouteLoading, useProjectFunnelGuard } from "@/hooks/useRouteEntityGuard";
 import { FocusStep } from "@/features/wizard/steps/FocusStep";
 import { FunnelTypeStep } from "@/features/wizard/steps/FunnelTypeStep";
 import { MaterialsStep } from "@/features/wizard/steps/MaterialsStep";
@@ -36,14 +37,18 @@ export default function FunnelWizardPage() {
     funnelId?: string;
     step?: string;
   }>();
-  const { getProject, getFunnel } = useAppData();
+  const { getFunnel, remoteSyncing } = useAppData();
   const { guest } = useAuth();
+  const guard = useProjectFunnelGuard(projectId, funnelId, { requireFunnel: false });
+  const guardView = renderRouteGuard(guard);
+  if (guardView) return guardView;
 
-  if (!projectId) return <Navigate to="/dashboard" replace />;
-  const project = getProject(projectId);
-  if (!project) return <Navigate to="/dashboard" replace />;
-
+  const { project } = guard;
   const funnel = funnelId ? getFunnel(funnelId) : null;
+
+  if (funnelId && !funnel && remoteSyncing) {
+    return <RouteLoading />;
+  }
 
   if (funnel && step === "details") {
     return <Navigate to={`/projects/${projectId}/funnels/${funnel.id}/wizard/metrics`} replace />;

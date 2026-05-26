@@ -144,6 +144,8 @@ export type FunnelAiAuditResult = {
 type AppDataContextValue = {
   store: MockStore;
   user: MockStore["user"];
+  /** Cloud pull in progress for the signed-in user (avoid early redirects on refresh). */
+  remoteSyncing: boolean;
   refresh: () => void;
 
   // Projects
@@ -285,12 +287,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     (authUser?.user_metadata as { full_name?: string } | undefined)?.full_name ||
     authUser?.email?.split("@")[0] ||
     null;
+  const scopeKey = guest ? "guest" : scopeUserId ?? "__anonymous__";
 
   const [store, setStore] = useState<MockStore>(() =>
     initStore({ userId: scopeUserId, email: scopeEmail, name: scopeName }),
   );
+  const [syncedScopeKey, setSyncedScopeKey] = useState(scopeKey);
+  const [remoteSyncing, setRemoteSyncing] = useState(false);
   const pushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncGenerationRef = useRef(0);
+
+  if (syncedScopeKey !== scopeKey) {
+    setSyncedScopeKey(scopeKey);
+    setStore(initStore({ userId: scopeUserId, email: scopeEmail, name: scopeName }));
+  }
 
   const scheduleRemotePush = useCallback(
     (next: MockStore) => {
@@ -305,29 +315,37 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    setStorageScope({ userId: scopeUserId });
-    const local = initStore({ userId: scopeUserId, email: scopeEmail, name: scopeName });
-    setStore(local);
-
-    if (!scopeUserId || guest) return;
+    if (!scopeUserId || guest) {
+      setRemoteSyncing(false);
+      return;
+    }
 
     const generation = ++syncGenerationRef.current;
+    setRemoteSyncing(true);
+
+    const local = initStore({ userId: scopeUserId, email: scopeEmail, name: scopeName });
 
     void (async () => {
-      const remote = await pullRemoteStore();
-      if (generation !== syncGenerationRef.current) return;
+      try {
+        const remote = await pullRemoteStore();
+        if (generation !== syncGenerationRef.current) return;
 
-      const merged = remote
-        ? mergeStores(local, remote, { userId: scopeUserId, email: scopeEmail, name: scopeName })
-        : local;
+        const merged = remote
+          ? mergeStores(local, remote, { userId: scopeUserId, email: scopeEmail, name: scopeName })
+          : local;
 
-      if (!storesEqual(local, merged)) {
-        saveStore(merged);
-        setStore(merged);
+        if (!storesEqual(local, merged)) {
+          saveStore(merged);
+          setStore(merged);
+        }
+
+        void pushRemoteStore(merged);
+        void syncAllProjectsToRemote(merged);
+      } finally {
+        if (generation === syncGenerationRef.current) {
+          setRemoteSyncing(false);
+        }
       }
-
-      void pushRemoteStore(merged);
-      void syncAllProjectsToRemote(merged);
     })();
 
     return () => {
@@ -337,7 +355,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeUserId, guest]);
+  }, [scopeKey, scopeUserId, guest]);
 
   const persist = useCallback(
     (next: MockStore) => {
@@ -392,6 +410,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return {
       store,
       user: store.user,
+      remoteSyncing,
       refresh,
 
       // Projects
@@ -862,7 +881,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         return e;
       },
     };
-  }, [store, persist, refresh, syncProject, syncProjectForFunnel, syncGenericProjectNames, scopeUserId, guest]);
+  }, [store, persist, refresh, syncProject, syncProjectForFunnel, syncGenericProjectNames, scopeUserId, guest, remoteSyncing]);
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;
 }

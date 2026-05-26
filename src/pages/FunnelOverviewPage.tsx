@@ -1,4 +1,4 @@
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useMemo } from "react";
 import {
   ArrowLeft,
@@ -21,6 +21,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useAppData } from "@/context/AppDataContext";
+import { renderRouteGuard, useProjectFunnelGuard } from "@/hooks/useRouteEntityGuard";
 import { getFunnelTypeTemplate } from "@/data/funnelTypes/catalog";
 import { buildDiagnostics } from "@/utils/funnelDiagnostics";
 import { sortByPriority, BUCKET_LABELS } from "@/utils/icePriority";
@@ -53,18 +54,16 @@ const BUCKET_COLORS: Record<string, { ring: string; bg: string; text: string }> 
 export default function FunnelOverviewPage() {
   const { projectId, funnelId } = useParams<{ projectId: string; funnelId: string }>();
   const {
-    getProject,
-    getFunnel,
     funnelMaterials,
     funnelMetricsList,
     funnelHypotheses,
     funnelExperiments,
   } = useAppData();
+  const guard = useProjectFunnelGuard(projectId, funnelId);
+  const guardView = renderRouteGuard(guard);
+  if (guardView) return guardView;
 
-  if (!projectId || !funnelId) return <Navigate to="/dashboard" replace />;
-  const project = getProject(projectId);
-  const funnel = getFunnel(funnelId);
-  if (!project || !funnel) return <Navigate to="/dashboard" replace />;
+  const { project, funnel } = guard;
 
   const materials   = funnelMaterials(funnel.id);
   const metrics     = funnelMetricsList(funnel.id);
