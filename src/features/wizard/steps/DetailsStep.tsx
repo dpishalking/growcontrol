@@ -110,9 +110,8 @@ export function DetailsStep({ funnel }: { funnel: Funnel }) {
   return (
     <WizardLayout
       funnel={funnel}
-      activeStep="details"
+      activeStep="metrics"
       hideNav
-      quizMode
       onBack={() => nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/audit`)}
     >
       <QuizFlow

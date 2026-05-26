@@ -76,7 +76,7 @@ export function MetricStageCollapsible({ group, open, onOpenChange, onPatch, onD
           </button>
         </CollapsibleTrigger>
 
-        <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down">
+        <CollapsibleContent>
           <CardContent className="p-4 space-y-3">
             {group.items.map((m) => (
               <FunnelMetricCard

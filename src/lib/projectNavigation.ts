@@ -35,5 +35,5 @@ export function resolveProjectOpenTarget(
 }
 
 export function projectDashboardPath(projectId: string): string {
-  return `/dashboard?project=${encodeURIComponent(projectId)}`;
+  return `/projects/${encodeURIComponent(projectId)}`;
 }

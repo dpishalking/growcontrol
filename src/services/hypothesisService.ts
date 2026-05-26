@@ -61,6 +61,8 @@ export function createHypothesis(store: MockStore, input: HypothesisInput): Hypo
     testMethod: input.testMethod?.trim() ?? "",
     successCriteria: input.successCriteria?.trim() ?? "",
     testDurationDays: input.testDurationDays ?? 7,
+    minDataVolume: input.minDataVolume?.trim() ?? "",
+    tags: Array.isArray(input.tags) ? [...new Set(input.tags.map((t) => t.trim()).filter(Boolean))] : [],
     minBudget: input.minBudget ?? "",
     risk: input.risk ?? "",
     complexity,

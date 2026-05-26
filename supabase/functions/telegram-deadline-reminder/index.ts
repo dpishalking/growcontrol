@@ -12,6 +12,7 @@ type ReminderRow = {
   experiment_app_id: string;
   project_app_id: string;
   project_name: string;
+  owner_user_id: string;
   hypothesis_title: string;
   owner: string | null;
   end_date: string;

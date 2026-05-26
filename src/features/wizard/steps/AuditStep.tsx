@@ -177,7 +177,7 @@ export function AuditStep({ funnel }: { funnel: Funnel }) {
 
   const handleNext = () => {
     setFunnelStep(funnel.id, 6);
-    nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/signals`);
+    nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/hypotheses`);
   };
 
   return (
@@ -186,7 +186,7 @@ export function AuditStep({ funnel }: { funnel: Funnel }) {
       activeStep="audit"
       onBack={() => nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/metrics`)}
       onNext={handleNext}
-      nextLabel="К сигналам"
+      nextLabel="К гипотезам"
       nextDisabled={!snapshot?.report}
     >
       <div className="space-y-4">

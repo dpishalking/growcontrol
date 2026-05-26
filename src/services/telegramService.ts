@@ -52,8 +52,28 @@ export function telegramDeepLink(code: string): string {
   return `https://t.me/${BOT_USERNAME}?start=connect_${code}`;
 }
 
-/** Сгенерировать одноразовый код для привязки чата к проекту. */
-export async function createTelegramConnectCode(
+/** Ссылка для перехода в подключённый Telegram-чат. */
+export function telegramChatOpenUrl(chat: TelegramLinkedChat): string {
+  const bot = telegramBotUsername();
+
+  if (chat.chat_type === "private") {
+    return `https://t.me/${bot}`;
+  }
+
+  const numericId = BigInt(chat.chat_id);
+  if (numericId < 0n) {
+    const abs = (-numericId).toString();
+    if (abs.startsWith("100") && abs.length > 3) {
+      return `https://t.me/c/${abs.slice(3)}`;
+    }
+    return `tg://resolve?domain=${bot}`;
+  }
+
+  return `https://t.me/${bot}`;
+}
+
+/** Сгенерировать код для привязки чата к проекту. */
+export async function createProjectTelegramConnectCode(
   appProjectId: string,
 ): Promise<{ ok: true; code: TelegramConnectCode } | { ok: false; error: string }> {
   const { data: sessionData } = await supabase.auth.getSession();
@@ -69,7 +89,10 @@ export async function createTelegramConnectCode(
     console.warn("create_telegram_connect_code failed", error);
     const msg = error.message ?? "unknown error";
     if (msg.includes("project not found")) {
-      return { ok: false, error: "Проект не найден в базе — попробуйте ещё раз через секунду" };
+      return {
+        ok: false,
+        error: "Проект ещё не синхронизирован — сохраните проект и попробуйте снова",
+      };
     }
     if (msg.includes("permission denied")) {
       return { ok: false, error: "Нет доступа — перелогиньтесь и попробуйте снова" };
@@ -85,10 +108,15 @@ export async function createTelegramConnectCode(
   return { ok: true, code: { code: row.code, expires_at: row.expires_at } };
 }
 
+/** @deprecated Используйте createProjectTelegramConnectCode из мастера проекта. */
+export async function createTelegramConnectCode(): Promise<
+  { ok: true; code: TelegramConnectCode } | { ok: false; error: string }
+> {
+  return { ok: false, error: "Подключите Telegram из мастера конкретного проекта" };
+}
+
 /** Список чатов, привязанных к проекту. */
-export async function getProjectTelegramChats(
-  appProjectId: string,
-): Promise<TelegramLinkedChat[]> {
+export async function getProjectTelegramChats(appProjectId: string): Promise<TelegramLinkedChat[]> {
   const { data, error } = await supabase.rpc("get_project_telegram_chats", {
     p_app_id: appProjectId,
   });
@@ -99,6 +127,11 @@ export async function getProjectTelegramChats(
   }
 
   return Array.isArray(data) ? (data as TelegramLinkedChat[]) : [];
+}
+
+/** @deprecated */
+export async function getUserTelegramChats(): Promise<TelegramLinkedChat[]> {
+  return [];
 }
 
 /** Отвязать чат от проекта. */
@@ -118,6 +151,11 @@ export async function unlinkProjectTelegramChat(
   return true;
 }
 
+/** @deprecated */
+export async function unlinkUserTelegramChat(_chatId: string): Promise<boolean> {
+  return false;
+}
+
 function notifyReasonMessage(reason?: string): string {
   switch (reason) {
     case "telegram_send_failed":
@@ -132,7 +170,7 @@ function notifyReasonMessage(reason?: string): string {
     case "project_not_found":
       return "Проект не синхронизирован — откройте проект и подождите пару секунд";
     case "no_linked_chats":
-      return "Чат не привязан — подключите Telegram в проекте";
+      return "Чат не привязан — нажмите «Подключить Telegram» в мастере проекта";
     case "not_configured":
       return "Telegram-бот не настроен на сервере";
     case "empty_message":

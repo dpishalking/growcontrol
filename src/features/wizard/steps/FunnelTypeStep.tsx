@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { HelpCircle, Layers, Plus, Sparkles, Trash2 } from "lucide-react";
+import { HelpCircle, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/select";
 import { useAppData } from "@/context/AppDataContext";
 import { WizardLayout } from "@/features/wizard/WizardLayout";
+import { FunnelTypeCard, FunnelTypeStagePreview } from "@/features/wizard/FunnelTypeCard";
+import { getFunnelTypeVisual } from "@/data/funnelTypes/visuals";
 import {
   FUNNEL_TYPE_CATALOG,
   getFunnelTypeTemplate,
@@ -23,7 +25,6 @@ import {
 } from "@/data/funnelTypes/catalog";
 import type { Funnel } from "@/types/funnel";
 import type { FunnelStageDefinition, FunnelTypeId } from "@/types/funnelType";
-import { cn } from "@/lib/utils";
 
 const QUIZ_Q1 = [
   { value: "lead", label: "Оставить заявку" },
@@ -133,16 +134,19 @@ export function FunnelTypeStep({ funnel }: { funnel: Funnel }) {
       nextLabel="К материалам"
       nextDisabled={!selected}
     >
-      <div className="space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
-            Тип воронки определяет этапы, обязательные метрики, материалы для аудита и направления
-            гипотез. Выберите шаблон — система подставит структуру автоматически.
-          </p>
-          <Button variant="outline" size="sm" onClick={() => setShowQuiz((v) => !v)}>
-            <HelpCircle className="mr-1 h-4 w-4" />
-            Не знаю, какой тип
-          </Button>
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <h2 className="font-display text-xl font-semibold tracking-tight">Тип воронки</h2>
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+            <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
+              Шаблон задаёт этапы, метрики и материалы для аудита. Выберите карточку — структура
+              подставится автоматически.
+            </p>
+            <Button variant="outline" size="sm" onClick={() => setShowQuiz((v) => !v)} className="shrink-0">
+              <HelpCircle className="mr-1 h-4 w-4" />
+              Не знаю, какой тип
+            </Button>
+          </div>
         </div>
 
         {showQuiz ? (
@@ -185,42 +189,15 @@ export function FunnelTypeStep({ funnel }: { funnel: Funnel }) {
           </Card>
         ) : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          {FUNNEL_TYPE_CATALOG.map((type) => {
-            const active = selected === type.id;
-            return (
-              <button
-                key={type.id}
-                type="button"
-                onClick={() => setSelected(type.id)}
-                className={cn(
-                  "text-left rounded-xl border p-4 transition-colors",
-                  active
-                    ? "border-primary bg-primary/10 ring-1 ring-primary/30"
-                    : "border-border/60 hover:border-primary/40 hover:bg-muted/30",
-                )}
-              >
-                <div className="flex items-start gap-2">
-                  <Layers className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">{type.name}</p>
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{type.description}</p>
-                    <p className="text-[11px] text-muted-foreground mt-2">
-                      <span className="text-foreground/70">Пример:</span> {type.exampleFlow}
-                    </p>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      <Badge variant="outline" className="text-[10px]">
-                        {type.requiredStages.length} этапов
-                      </Badge>
-                      <Badge variant="outline" className="text-[10px]">
-                        {type.requiredMetrics.length} метрик
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-              </button>
-            );
-          })}
+        <div className="grid gap-4 sm:grid-cols-2">
+          {FUNNEL_TYPE_CATALOG.map((type) => (
+            <FunnelTypeCard
+              key={type.id}
+              type={type}
+              active={selected === type.id}
+              onSelect={() => setSelected(type.id)}
+            />
+          ))}
         </div>
 
         {selected === "custom" ? (
@@ -258,22 +235,20 @@ export function FunnelTypeStep({ funnel }: { funnel: Funnel }) {
             </CardContent>
           </Card>
         ) : selected ? (
-          <Card className="border-border/60">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Этапы шаблона</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ol className="flex flex-wrap gap-2">
-                {getFunnelTypeTemplate(selected).requiredStages.map((s, i) => (
-                  <li key={s.id}>
-                    <Badge variant="secondary" className="text-xs font-normal">
-                      {i + 1}. {s.label}
-                    </Badge>
-                  </li>
-                ))}
-              </ol>
-            </CardContent>
-          </Card>
+          <section className="rounded-2xl border border-border/60 bg-card/15 overflow-hidden">
+            <div className="border-b border-border/50 bg-muted/15 px-4 py-4 sm:px-5">
+              <h3 className="font-display text-lg font-bold tracking-tight">Этапы шаблона</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                {getFunnelTypeTemplate(selected).name}
+              </p>
+            </div>
+            <div className="p-4 sm:p-5">
+              <FunnelTypeStagePreview
+                stages={getFunnelTypeTemplate(selected).requiredStages}
+                accentClass={getFunnelTypeVisual(selected).iconClass}
+              />
+            </div>
+          </section>
         ) : null}
       </div>
     </WizardLayout>

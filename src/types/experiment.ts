@@ -19,6 +19,14 @@ export type Experiment = {
   result: string;
   decision: ExperimentDecision;
   notes: string;
+  /** Числовая база (из гипотезы/метрики на старт). */
+  baselineNumeric?: number | null;
+  /** Цель в числовом виде, если удалось распарсить. */
+  targetNumeric?: number | null;
+  /** Итог в числовом виде после теста. */
+  resultNumeric?: number | null;
+  /** Порог объёма данных (копируется из гипотезы). */
+  minDataVolume?: string;
   createdAt: string;
   updatedAt: string;
 };

@@ -74,6 +74,16 @@ export function hypothesisDisplayParts(
   };
 }
 
+/** Короткий итог «то» — для списка, без метрик в скобках. */
+export function hypothesisEffectPreview(thenMetric: string | null | undefined): string | null {
+  const t = thenMetric?.trim();
+  if (!t) return null;
+  const cut = t.indexOf("(метрика:");
+  const preview = (cut > 0 ? t.slice(0, cut) : t).trim();
+  if (!preview) return null;
+  return preview.length > 120 ? `${preview.slice(0, 117)}…` : preview;
+}
+
 /** Текст для sync в Supabase — структурированный, без дублирования title. */
 export function buildHypothesisSyncDescription(
   h: Pick<

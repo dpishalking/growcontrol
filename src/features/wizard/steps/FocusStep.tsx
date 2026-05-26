@@ -165,9 +165,9 @@ export function FocusStep({ funnel }: { funnel: Funnel | null }) {
   return (
     <WizardLayout
       funnel={activeFunnel}
+      projectId={projectId}
       activeStep="focus"
       hideNav
-      quizMode
     >
       <div className="space-y-4">
         {otherFunnels.length > 0 ? (

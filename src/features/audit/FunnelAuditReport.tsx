@@ -55,17 +55,29 @@ const STATUS_DOT: Record<StageAuditStatus, string> = {
 };
 
 const STATUS_SURFACE: Record<StageAuditStatus, string> = {
-  critical: "border-danger/30 bg-danger-soft/30",
-  bad: "border-warning/30 bg-warning-soft/25",
-  weak: "border-primary/25 bg-primary/5",
-  ok: "border-border/50 bg-muted/15",
-  good: "border-success/25 bg-success-soft/20",
+  critical: "border-danger/45 bg-danger-soft/35",
+  bad: "border-warning/45 bg-warning-soft/30",
+  weak: "border-primary/35 bg-primary/10",
+  ok: "border-border/60 bg-card",
+  good: "border-success/40 bg-success-soft/25",
 };
 
 const SEV_LABEL: Record<string, string> = {
   critical: "Критично",
   important: "Важно",
   minor: "Можно улучшить",
+};
+
+const SEV_BADGE: Record<string, string> = {
+  critical: "border-danger/40 bg-danger-soft/40 text-danger",
+  important: "border-warning/40 bg-warning-soft/40 text-warning",
+  minor: "border-border bg-muted/40 text-muted-foreground",
+};
+
+const SEV_ACCENT: Record<string, string> = {
+  critical: "border-l-danger bg-danger-soft/15",
+  important: "border-l-warning bg-warning-soft/10",
+  minor: "border-l-border bg-card",
 };
 
 type Props = {
@@ -197,11 +209,6 @@ export function FunnelAuditReport({
       </div>
 
       <Tabs value={tab} onValueChange={setTab} className="space-y-4">
-        <h3 className="mx-auto max-w-2xl px-1 text-center font-display text-lg sm:text-xl font-semibold leading-snug tracking-tight text-foreground">
-          Выявили{" "}
-          <span className="bg-gradient-money bg-clip-text text-transparent">узкие места</span>{" "}
-          по метрикам и этапам воронки — главные ошибки конверсии
-        </h3>
         <TabsList className="grid w-full grid-cols-2 h-9">
           <TabsTrigger value="overview" className="text-xs sm:text-sm">
             Обзор
@@ -209,21 +216,14 @@ export function FunnelAuditReport({
           <TabsTrigger value="stages" className="text-xs sm:text-sm">
             Этапы
             {issueCount > 0 ? (
-              <span className="ml-1.5 rounded-full bg-warning/15 px-1.5 py-0 text-[10px] tabular-nums text-warning">
+              <span className="ml-1.5 rounded-full bg-warning/20 px-1.5 py-0 text-[10px] tabular-nums text-warning font-medium">
                 {issueCount}
               </span>
             ) : null}
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="mt-0 space-y-3 focus-visible:outline-none">
-          <SectionHeading
-            title="Карта воронки"
-            hint="Оценка материалов AI · нажмите этап для деталей"
-          />
-          <FunnelStageMap stages={stageViews} onStageClick={scrollToStage} />
-
-          <SectionHeading title="Главный вывод" />
+        <TabsContent value="overview" className="mt-0 space-y-5 focus-visible:outline-none">
           <OverviewHero
             report={report}
             health={health}
@@ -231,47 +231,39 @@ export function FunnelAuditReport({
             onStageClick={scrollToStage}
           />
 
-          {hypothesisCount > 0 ? (
-            <p className="text-[11px] text-center text-muted-foreground px-1">
-              {hypothesisCount} идей для гипотез — на шаге «Гипотезы»
-            </p>
+          <div className="space-y-2.5">
+            <SectionHeading title="Карта воронки" hint="Нажмите этап — откроется разбор" />
+            <FunnelStageMap stages={stageViews} onStageClick={scrollToStage} />
+          </div>
+
+          {report.problems.length > 0 ? (
+            <div className="space-y-3">
+              <SectionHeading
+                title="Ключевые проблемы"
+                hint={`${report.problems.length} ошиб${report.problems.length === 1 ? "ка" : report.problems.length < 5 ? "ки" : "ок"}, режущих конверсию`}
+                prominent
+              />
+              <div className="space-y-2">
+                {report.problems.map((p, i) => (
+                  <ProblemCard key={i} problem={p} />
+                ))}
+              </div>
+            </div>
           ) : null}
 
-          {report.crossMaterialMismatches?.length || report.problems?.length ? (
-            <Collapsible>
-              <CollapsibleTrigger className="flex w-full items-center justify-between rounded-xl border border-border/50 px-4 py-3 text-sm text-muted-foreground hover:bg-muted/20 transition-colors">
-                <span>Подробности и расхождения</span>
-                <ChevronDown className="h-4 w-4 shrink-0" />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="pt-3 space-y-3">
-                {report.crossMaterialMismatches?.map((m, i) => (
-                  <div key={i} className="rounded-xl border border-border/40 px-4 py-3 space-y-1.5 text-sm">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline" className="text-[10px]">
-                        {SEV_LABEL[m.severity] ?? m.severity}
-                      </Badge>
-                      <span className="font-medium">{m.title}</span>
-                    </div>
-                    <p className="text-muted-foreground leading-relaxed">{m.detail}</p>
-                    <p className="leading-relaxed">
-                      <span className="text-primary">→ </span>
-                      {m.fix}
-                    </p>
-                  </div>
+          {report.crossMaterialMismatches?.length ? (
+            <div className="space-y-3">
+              <SectionHeading title="Расхождения между материалами" prominent />
+              <div className="space-y-2">
+                {report.crossMaterialMismatches.map((m, i) => (
+                  <MismatchCard key={i} mismatch={m} />
                 ))}
-                {report.problems?.map((p, i) => (
-                  <div key={i} className="rounded-xl border border-border/40 px-4 py-3 space-y-1.5 text-sm">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline" className="text-[10px]">
-                        {SEV_LABEL[p.severity]}
-                      </Badge>
-                      <span className="font-medium">{p.title}</span>
-                    </div>
-                    <p className="text-muted-foreground leading-relaxed">{p.whyItHurts}</p>
-                  </div>
-                ))}
-              </CollapsibleContent>
-            </Collapsible>
+              </div>
+            </div>
+          ) : null}
+
+          {hypothesisCount > 0 ? (
+            <AuditNextStepHint count={hypothesisCount} />
           ) : null}
         </TabsContent>
 
@@ -308,11 +300,104 @@ export function FunnelAuditReport({
   );
 }
 
-function SectionHeading({ title, hint }: { title: string; hint?: string }) {
+function SectionHeading({
+  title,
+  hint,
+  prominent,
+}: {
+  title: string;
+  hint?: string;
+  prominent?: boolean;
+}) {
+  if (prominent) {
+    return (
+      <header className="space-y-1 border-b border-border/60 pb-3">
+        <h2 className="font-display text-lg font-bold tracking-tight text-foreground sm:text-xl">{title}</h2>
+        {hint ? <p className="text-sm text-muted-foreground leading-snug">{hint}</p> : null}
+      </header>
+    );
+  }
+
   return (
-    <div className="space-y-0.5 pt-0.5">
-      <h3 className="text-sm font-medium tracking-tight">{title}</h3>
-      {hint ? <p className="text-[11px] text-muted-foreground leading-snug">{hint}</p> : null}
+    <div className="space-y-0.5">
+      <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>
+      {hint ? <p className="text-xs text-muted-foreground leading-snug">{hint}</p> : null}
+    </div>
+  );
+}
+
+function SeverityBadge({ severity }: { severity: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+        SEV_BADGE[severity] ?? SEV_BADGE.minor,
+      )}
+    >
+      {SEV_LABEL[severity] ?? severity}
+    </span>
+  );
+}
+
+function ProblemCard({ problem: p }: { problem: FunnelAuditReport["problems"][number] }) {
+  return (
+    <article
+      className={cn(
+        "rounded-xl border border-border/60 border-l-[3px] px-4 py-3.5 space-y-2",
+        SEV_ACCENT[p.severity] ?? SEV_ACCENT.minor,
+      )}
+    >
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-1.5">
+        <SeverityBadge severity={p.severity} />
+        <h4 className="font-display text-base font-bold leading-snug tracking-tight text-foreground flex-1 min-w-0 sm:text-[1.05rem]">
+          {p.title}
+        </h4>
+      </div>
+      <p className="text-sm leading-relaxed text-foreground/85">{p.whyItHurts}</p>
+      {p.moneyImpact ? (
+        <p className="text-xs font-medium text-warning">{p.moneyImpact}</p>
+      ) : null}
+    </article>
+  );
+}
+
+function MismatchCard({ mismatch: m }: { mismatch: NonNullable<FunnelAuditReport["crossMaterialMismatches"]>[number] }) {
+  return (
+    <article
+      className={cn(
+        "rounded-xl border border-border/60 border-l-[3px] px-4 py-3.5 space-y-2",
+        SEV_ACCENT[m.severity] ?? SEV_ACCENT.minor,
+      )}
+    >
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-1.5">
+        <SeverityBadge severity={m.severity} />
+        <h4 className="font-display text-base font-bold leading-snug tracking-tight text-foreground flex-1 min-w-0 sm:text-[1.05rem]">
+          {m.title}
+        </h4>
+      </div>
+      <p className="text-sm leading-relaxed text-foreground/85">{m.detail}</p>
+      <p className="text-sm leading-relaxed text-foreground">
+        <span className="font-medium text-primary">→ </span>
+        {m.fix}
+      </p>
+    </article>
+  );
+}
+
+/** Связка «Аудит → Гипотезы»: черновики из отчёта, не готовые гипотезы в плане. */
+function AuditNextStepHint({ count }: { count: number }) {
+  const n = count;
+  const draftWord = n === 1 ? "черновик" : n < 5 ? "черновика" : "черновиков";
+
+  return (
+    <div className="rounded-xl border border-primary/25 bg-primary/5 px-4 py-3.5 space-y-1">
+      <p className="text-xs font-semibold uppercase tracking-wider text-primary">Что дальше</p>
+      <p className="text-sm leading-relaxed text-foreground">
+        Это шаг <span className="font-medium">диагноза</span> — проблемы и расхождения. AI сохранил{" "}
+        <span className="font-semibold">{n} {draftWord}</span> идей; на шаге{" "}
+        <span className="font-medium">«Гипотезы»</span> импортируете их под красные метрики и выберете до 3 на
+        тест.
+      </p>
     </div>
   );
 }
@@ -339,30 +424,30 @@ function OverviewHero({
     Boolean(report.quickestWin?.action);
 
   return (
-    <div className="rounded-xl border border-border/50 bg-card/40 px-4 py-3.5">
-      <div className="flex gap-3 items-start">
-        <div className="shrink-0 pt-0.5">
-          <p className={cn("text-2xl font-display font-semibold tabular-nums leading-none", healthTone)}>
+    <div className="rounded-xl border border-border bg-card shadow-sm px-4 py-4 space-y-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Главный вывод
+      </p>
+      <div className="flex gap-4 items-start">
+        <div className="shrink-0 text-center">
+          <p className={cn("text-3xl font-display font-bold tabular-nums leading-none", healthTone)}>
             {health}
-            <span className="text-sm text-muted-foreground font-normal">%</span>
           </p>
-          <div className="mt-1.5 h-1 w-10 rounded-full bg-muted overflow-hidden">
-            <div
-              className={cn("h-full rounded-full", healthBar)}
-              style={{ width: `${health}%` }}
-            />
+          <p className="text-[10px] text-muted-foreground mt-0.5">из 100</p>
+          <div className="mt-2 h-1.5 w-12 rounded-full bg-muted overflow-hidden mx-auto">
+            <div className={cn("h-full rounded-full", healthBar)} style={{ width: `${health}%` }} />
           </div>
         </div>
 
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <p className="text-sm font-medium leading-snug line-clamp-3">
+        <div className="min-w-0 flex-1 space-y-2">
+          <p className="text-base font-semibold leading-snug text-foreground">
             {report.diagnosis.mainProblem}
           </p>
           {mainStage && mainStage.status !== "ok" && mainStage.status !== "good" ? (
             <button
               type="button"
               onClick={() => onStageClick(mainStage.stageId)}
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline underline-offset-2"
+              className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/15 transition-colors"
             >
               <Target className="h-3 w-3" />
               Утечка: {mainStage.stageLabel}
@@ -373,40 +458,40 @@ function OverviewHero({
       </div>
 
       {hasDetails ? (
-        <Collapsible className="mt-3 border-t border-border/40 pt-2">
-          <CollapsibleTrigger className="flex w-full items-center justify-between text-xs text-muted-foreground hover:text-foreground transition-colors py-1">
-            <span>Утечки и что делать</span>
-            <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-          </CollapsibleTrigger>
-          <CollapsibleContent className="pt-2 space-y-2.5 text-sm">
-            {report.diagnosis.mainMoneyLeak ? (
-              <p className="text-muted-foreground leading-relaxed">
-                <TrendingDown className="inline h-3.5 w-3.5 text-warning mr-1 -mt-0.5" />
+        <div className="space-y-2.5 border-t border-border/60 pt-3">
+          {report.diagnosis.mainMoneyLeak ? (
+            <div className="rounded-lg bg-warning-soft/20 border border-warning/25 px-3 py-2.5">
+              <p className="text-xs font-semibold text-warning mb-1 flex items-center gap-1">
+                <TrendingDown className="h-3.5 w-3.5" />
+                Утечка денег
+              </p>
+              <p className="text-sm leading-relaxed text-foreground">
                 {report.diagnosis.mainMoneyLeak}
                 {report.diagnosis.estimatedLossPercent ? (
-                  <span className="text-foreground"> · ~{report.diagnosis.estimatedLossPercent}</span>
+                  <span className="font-semibold text-warning"> · ~{report.diagnosis.estimatedLossPercent}</span>
                 ) : null}
               </p>
-            ) : null}
+            </div>
+          ) : null}
 
-            {report.diagnosis.mainLever ? (
-              <p className="leading-relaxed text-foreground/90">
-                <span className="text-xs font-medium text-primary">Рычаг · </span>
-                {report.diagnosis.mainLever}
-              </p>
-            ) : report.quickestWin ? (
-              <div className="flex gap-2 text-sm">
-                <Zap className="h-4 w-4 text-success shrink-0 mt-0.5" />
-                <div>
-                  <p className="leading-snug">{report.quickestWin.action}</p>
-                  {report.quickestWin.expectedEffect ? (
-                    <p className="text-xs text-muted-foreground mt-0.5">{report.quickestWin.expectedEffect}</p>
-                  ) : null}
-                </div>
+          {report.diagnosis.mainLever ? (
+            <div className="rounded-lg bg-primary/8 border border-primary/20 px-3 py-2.5">
+              <p className="text-xs font-semibold text-primary mb-1">Главный рычаг</p>
+              <p className="text-sm leading-relaxed text-foreground">{report.diagnosis.mainLever}</p>
+            </div>
+          ) : report.quickestWin ? (
+            <div className="rounded-lg bg-success-soft/25 border border-success/25 px-3 py-2.5 flex gap-2">
+              <Zap className="h-4 w-4 text-success shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-semibold text-success mb-0.5">Быстрая победа</p>
+                <p className="text-sm leading-snug text-foreground">{report.quickestWin.action}</p>
+                {report.quickestWin.expectedEffect ? (
+                  <p className="text-xs text-muted-foreground mt-1">{report.quickestWin.expectedEffect}</p>
+                ) : null}
               </div>
-            ) : null}
-          </CollapsibleContent>
-        </Collapsible>
+            </div>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
@@ -427,21 +512,21 @@ function StageCollapsible({
     <Collapsible open={open} onOpenChange={onOpenChange}>
       <div
         className={cn(
-          "rounded-xl border overflow-hidden transition-colors",
+          "rounded-xl border border-border/70 overflow-hidden transition-colors shadow-sm",
           STATUS_SURFACE[view.status] ?? STATUS_SURFACE.ok,
         )}
       >
         <CollapsibleTrigger asChild>
           <button
             type="button"
-            className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-background/30 transition-colors"
+            className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-background/40 transition-colors"
           >
             <span
               className={cn("h-2 w-2 shrink-0 rounded-full", STATUS_DOT[view.status] ?? STATUS_DOT.ok)}
             />
             <span className="text-xs tabular-nums text-muted-foreground w-4">{view.index}</span>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium leading-tight">{view.stageLabel}</p>
+              <p className="text-sm font-semibold leading-tight text-foreground">{view.stageLabel}</p>
               {!open && view.leakHint ? (
                 <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{view.leakHint}</p>
               ) : null}
@@ -458,7 +543,7 @@ function StageCollapsible({
           </button>
         </CollapsibleTrigger>
 
-        <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down">
+        <CollapsibleContent>
           <div className="px-4 pb-4 pt-3 space-y-4 border-t border-border/30">
             {audit?.problem ? (
               <div className="space-y-1">
@@ -470,12 +555,12 @@ function StageCollapsible({
             ) : null}
 
             {audit?.howToFix ? (
-              <div className="rounded-lg bg-background/40 border border-border/30 px-3 py-2.5 space-y-1">
-                <p className="text-xs font-medium text-primary flex items-center gap-1">
+              <div className="rounded-lg bg-card border border-primary/25 px-3 py-2.5 space-y-1">
+                <p className="text-xs font-semibold text-primary flex items-center gap-1">
                   <Wrench className="h-3 w-3" />
                   Что покрутить
                 </p>
-                <p className="text-sm leading-relaxed">{audit.howToFix}</p>
+                <p className="text-sm leading-relaxed text-foreground">{audit.howToFix}</p>
                 {audit.rewriteExample ? (
                   <p className="text-xs text-muted-foreground italic leading-relaxed border-t border-border/30 pt-2 mt-2">
                     {audit.rewriteExample}

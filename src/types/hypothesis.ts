@@ -26,6 +26,10 @@ export type Hypothesis = {
   testMethod: string;
   successCriteria: string;
   testDurationDays: number;
+  /** Мин. объём данных для вывода (показы, сессии, заявки). */
+  minDataVolume: string;
+  /** Теги для группировки и поиска. */
+  tags: string[];
   minBudget: string;
   risk: string;
   /** Сложность 1..5 (5 — самое сложное). */
@@ -59,6 +63,8 @@ export type HypothesisInput = {
   testMethod?: string;
   successCriteria?: string;
   testDurationDays?: number;
+  minDataVolume?: string;
+  tags?: string[];
   minBudget?: string;
   risk?: string;
   complexity?: number;

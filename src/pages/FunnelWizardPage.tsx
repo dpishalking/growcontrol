@@ -1,12 +1,14 @@
 import { Navigate, useParams } from "react-router-dom";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { getFunnelTypeTemplate } from "@/data/funnelTypes/catalog";
+import { TelegramConnectButton } from "@/features/dashboard/TelegramConnectButton";
 import { useAppData } from "@/context/AppDataContext";
+import { useAuth } from "@/hooks/useAuth";
 import { FocusStep } from "@/features/wizard/steps/FocusStep";
 import { FunnelTypeStep } from "@/features/wizard/steps/FunnelTypeStep";
 import { MaterialsStep } from "@/features/wizard/steps/MaterialsStep";
 import { AuditStep } from "@/features/wizard/steps/AuditStep";
 import { MetricsStep } from "@/features/wizard/steps/MetricsStep";
-import { SignalsStep } from "@/features/wizard/steps/SignalsStep";
 import { HypothesesStep } from "@/features/wizard/steps/HypothesesStep";
 import { PlanStep } from "@/features/wizard/steps/PlanStep";
 import type { WizardStepId } from "@/features/wizard/wizardSteps";
@@ -18,7 +20,6 @@ const STEP_IDS: WizardStepId[] = [
   "materials",
   "metrics",
   "audit",
-  "signals",
   "hypotheses",
   "plan",
 ];
@@ -36,6 +37,7 @@ export default function FunnelWizardPage() {
     step?: string;
   }>();
   const { getProject, getFunnel } = useAppData();
+  const { guest } = useAuth();
 
   if (!projectId) return <Navigate to="/dashboard" replace />;
   const project = getProject(projectId);
@@ -47,8 +49,8 @@ export default function FunnelWizardPage() {
     return <Navigate to={`/projects/${projectId}/funnels/${funnel.id}/wizard/metrics`} replace />;
   }
 
-  if (funnel && step === "diagnostics") {
-    return <Navigate to={`/projects/${projectId}/funnels/${funnel.id}/wizard/signals`} replace />;
+  if (funnel && (step === "diagnostics" || step === "signals")) {
+    return <Navigate to={`/projects/${projectId}/funnels/${funnel.id}/wizard/hypotheses`} replace />;
   }
 
   if (funnel && step === "prioritization") {
@@ -69,13 +71,26 @@ export default function FunnelWizardPage() {
     return <Navigate to={`/projects/${projectId}/funnels/${funnel.id}/wizard/funnel-type`} replace />;
   }
 
+  const typeLabel = funnel?.funnelTypeId
+    ? getFunnelTypeTemplate(funnel.funnelTypeId).name
+    : null;
+  const wizardTitle = funnel
+    ? [funnel.productName || "без названия", typeLabel].filter(Boolean).join(" · ")
+    : "Новая воронка";
+
   return (
     <>
       <PageHeader
-        title={funnel ? `Воронка: ${funnel.productName || "без названия"}` : "Новая воронка"}
-        subtitle="Шаги мастера → одна воронка → конкретные гипотезы по метрикам"
+        title={wizardTitle}
+        subtitle={
+          stepId === "focus"
+            ? "Шаги мастера → одна воронка → конкретные гипотезы по метрикам"
+            : undefined
+        }
         backTo={projectDashboardPath(projectId)}
         backLabel="К проектам"
+        compact={stepId !== "focus"}
+        action={!guest ? <TelegramConnectButton appProjectId={projectId} /> : undefined}
       />
 
       {stepId === "focus" ? (
@@ -86,7 +101,6 @@ export default function FunnelWizardPage() {
           {stepId === "materials" && <MaterialsStep funnel={funnel} />}
           {stepId === "metrics" && <MetricsStep funnel={funnel} />}
           {stepId === "audit" && <AuditStep funnel={funnel} />}
-          {stepId === "signals" && <SignalsStep funnel={funnel} />}
           {stepId === "hypotheses" && <HypothesesStep funnel={funnel} />}
           {stepId === "plan" && <PlanStep funnel={funnel} />}
         </>

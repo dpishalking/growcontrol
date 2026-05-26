@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ChevronsDownUp, ChevronsUpDown, Plus } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, ChevronDown, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Select,
   SelectContent,
@@ -24,6 +29,7 @@ import { getFunnelTypeTemplate } from "@/data/funnelTypes/catalog";
 import type { Funnel } from "@/types/funnel";
 import { getStagesForFunnel } from "@/utils/funnelStages";
 import { groupMetricsByFunnelStages } from "@/utils/metricStageGrouping";
+import { cn } from "@/lib/utils";
 import type {
   MetricConfidence,
   MetricDirection,
@@ -79,6 +85,19 @@ export function MetricsStep({ funnel }: { funnel: Funnel }) {
   const typeTemplate = getFunnelTypeTemplate(funnel.funnelTypeId ?? undefined);
   const metricCatalog = [...typeTemplate.requiredMetrics, ...typeTemplate.optionalMetrics];
 
+  const keyMetricNames = useMemo(
+    () =>
+      new Set(
+        metricCatalog
+          .filter((c) => c.required && c.revenueImpact >= 4)
+          .map((c) => c.name),
+      ),
+    [metricCatalog],
+  );
+
+  const [showAllMetrics, setShowAllMetrics] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
   const stageGroups = useMemo(
     () =>
       groupMetricsByFunnelStages(
@@ -98,6 +117,21 @@ export function MetricsStep({ funnel }: { funnel: Funnel }) {
   const visibleStageGroups = useMemo(
     () => stageGroups.filter((group) => group.items.length > 0),
     [stageGroups],
+  );
+
+  const displayStageGroups = useMemo(() => {
+    if (showAllMetrics) return visibleStageGroups;
+    return visibleStageGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((m) => keyMetricNames.has(m.name)),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [visibleStageGroups, showAllMetrics, keyMetricNames]);
+
+  const hiddenMetricsCount = useMemo(
+    () => metrics.filter((m) => !keyMetricNames.has(m.name)).length,
+    [metrics, keyMetricNames],
   );
 
   const stageInitRef = useRef<string | null>(null);
@@ -197,8 +231,8 @@ export function MetricsStep({ funnel }: { funnel: Funnel }) {
         <div className="space-y-2">
           <h2 className="font-display text-xl font-semibold tracking-tight">Метрики воронки</h2>
           <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
-            Этапы воронки свёрнуты в блоки — раскройте нужный и заполните план и факт. Если плана
-            нет, достаточно факта — сравним с рыночным эталоном.
+            Сначала заполните план и факт для ключевых метрик — этого достаточно для анализа.
+            Остальные можно добавить позже.
           </p>
           {metrics.length > 0 ? (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -233,7 +267,7 @@ export function MetricsStep({ funnel }: { funnel: Funnel }) {
         </div>
 
         <div className="space-y-3">
-          {visibleStageGroups.map((group) => (
+          {displayStageGroups.map((group) => (
             <MetricStageCollapsible
               key={group.stage.id}
               group={group}
@@ -243,6 +277,16 @@ export function MetricsStep({ funnel }: { funnel: Funnel }) {
               onDelete={deleteFunnelMetric}
             />
           ))}
+          {!showAllMetrics && hiddenMetricsCount > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={() => setShowAllMetrics(true)}
+            >
+              Показать все метрики (+{hiddenMetricsCount})
+            </Button>
+          ) : null}
         </div>
 
         <Card id="metric-add-form" className="border-border/60">
@@ -332,7 +376,7 @@ export function MetricsStep({ funnel }: { funnel: Funnel }) {
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label className="text-xs">План</Label>
                   <Input
@@ -349,58 +393,74 @@ export function MetricsStep({ funnel }: { funnel: Funnel }) {
                     placeholder="1,9"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Уверенность в данных</Label>
-                  <Select
-                    value={draft.confidence}
-                    onValueChange={(v) =>
-                      setDraft((d) => ({ ...d, confidence: v as MetricConfidence }))
-                    }
+              </div>
+
+              <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
                   >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="high">Высокая</SelectItem>
-                      <SelectItem value="medium">Средняя</SelectItem>
-                      <SelectItem value="low">Низкая</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+                    <ChevronDown
+                      className={cn("h-3.5 w-3.5 transition-transform", advancedOpen && "rotate-180")}
+                    />
+                    Расширенные настройки
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-3 pt-2">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Уверенность в данных</Label>
+                      <Select
+                        value={draft.confidence}
+                        onValueChange={(v) =>
+                          setDraft((d) => ({ ...d, confidence: v as MetricConfidence }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="high">Высокая</SelectItem>
+                          <SelectItem value="medium">Средняя</SelectItem>
+                          <SelectItem value="low">Низкая</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label className="text-xs">Источник данных</Label>
+                      <Input
+                        value={draft.dataSource}
+                        onChange={(e) => setDraft((d) => ({ ...d, dataSource: e.target.value }))}
+                        placeholder="Я.Метрика, рекламный кабинет, CRM"
+                      />
+                    </div>
+                  </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Источник данных</Label>
-                  <Input
-                    value={draft.dataSource}
-                    onChange={(e) => setDraft((d) => ({ ...d, dataSource: e.target.value }))}
-                    placeholder="Я.Метрика, рекламный кабинет, CRM"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Влияние на деньги (1–5)</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={5}
-                    value={draft.revenueImpact}
-                    onChange={(e) =>
-                      setDraft((d) => ({ ...d, revenueImpact: Number(e.target.value) || 3 }))
-                    }
-                  />
-                </div>
-              </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Влияние на деньги (1–5)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={5}
+                      value={draft.revenueImpact}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, revenueImpact: Number(e.target.value) || 3 }))
+                      }
+                    />
+                  </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-xs">Комментарий</Label>
-                <Textarea
-                  rows={2}
-                  value={draft.comment}
-                  onChange={(e) => setDraft((d) => ({ ...d, comment: e.target.value }))}
-                  placeholder="Откуда цифры, контекст, замечания"
-                />
-              </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Комментарий</Label>
+                    <Textarea
+                      rows={2}
+                      value={draft.comment}
+                      onChange={(e) => setDraft((d) => ({ ...d, comment: e.target.value }))}
+                      placeholder="Откуда цифры, контекст, замечания"
+                    />
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
 
               <Button onClick={handleAdd} size="sm">
                 <Plus className="mr-1 h-4 w-4" />

@@ -1,4 +1,5 @@
 import { Link, Navigate, useParams } from "react-router-dom";
+import { useMemo } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -9,10 +10,16 @@ import {
   TrendingUp,
   Zap,
   AlertTriangle,
+  ChevronDown,
   ChevronRight,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { useAppData } from "@/context/AppDataContext";
 import { getFunnelTypeTemplate } from "@/data/funnelTypes/catalog";
 import { buildDiagnostics } from "@/utils/funnelDiagnostics";
@@ -21,20 +28,30 @@ import { WIZARD_STEPS, wizardStepByIndex } from "@/features/wizard/wizardSteps";
 import { getStageLabelForFunnel } from "@/utils/funnelStages";
 import { projectDashboardPath } from "@/lib/projectNavigation";
 import { cn } from "@/lib/utils";
+import type { Experiment, ExperimentDecision } from "@/types/experiment";
 import type { Hypothesis } from "@/types/hypothesis";
-import { useAuth } from "@/hooks/useAuth";
-import { TelegramConnectCard } from "@/features/dashboard/TelegramConnectCard";
+
+const EXPERIMENT_DECISION_RU: Partial<Record<ExperimentDecision, string>> = {
+  scale: "Масштаб",
+  iterate: "Доработка",
+  rerun: "Повтор",
+  stop: "Стоп",
+  archive: "Архив",
+};
 
 const BUCKET_COLORS: Record<string, { ring: string; bg: string; text: string }> = {
-  quick_test:  { ring: "border-emerald-500/40", bg: "bg-emerald-500/10", text: "text-emerald-400" },
-  strategic:   { ring: "border-primary/40",     bg: "bg-primary/10",     text: "text-primary"    },
-  uncertain:   { ring: "border-yellow-500/40",  bg: "bg-yellow-500/10",  text: "text-yellow-400" },
-  do_not_touch:{ ring: "border-border/40",      bg: "bg-muted/30",       text: "text-muted-foreground" },
+  quick_test: { ring: "border-emerald-500/40", bg: "bg-emerald-500/10", text: "text-emerald-400" },
+  strategic: { ring: "border-primary/40", bg: "bg-primary/10", text: "text-primary" },
+  uncertain: { ring: "border-yellow-500/40", bg: "bg-yellow-500/10", text: "text-yellow-400" },
+  do_not_touch: {
+    ring: "border-border/40",
+    bg: "bg-muted/30",
+    text: "text-muted-foreground",
+  },
 };
 
 export default function FunnelOverviewPage() {
   const { projectId, funnelId } = useParams<{ projectId: string; funnelId: string }>();
-  const { user: authUser, guest } = useAuth();
   const {
     getProject,
     getFunnel,
@@ -54,7 +71,24 @@ export default function FunnelOverviewPage() {
   const hypotheses  = funnelHypotheses(funnel.id);
   const experiments = funnelExperiments(funnel.id);
 
-  const template    = getFunnelTypeTemplate(funnel.funnelTypeId ?? undefined);
+  const hypById = useMemo(() => new Map(hypotheses.map((h) => [h.id, h])), [hypotheses]);
+
+  const finishedExperiments = useMemo(() => {
+    return [...experiments]
+      .filter((e) => e.decision !== "pending")
+      .sort(
+        (a, b) =>
+          new Date(b.endDate ?? b.updatedAt).getTime() -
+          new Date(a.endDate ?? a.updatedAt).getTime(),
+      );
+  }, [experiments]);
+
+  const winRatePct = useMemo(() => {
+    const finished = experiments.filter((e) => e.decision !== "pending");
+    if (!finished.length) return null;
+    const wins = finished.filter((e) => e.decision === "scale").length;
+    return Math.round((wins / finished.length) * 100);
+  }, [experiments]);
   const diag        = buildDiagnostics(metrics, template.bottleneckMetricNames);
   const typeName    = funnel.funnelTypeId ? template.name : null;
 
@@ -175,7 +209,7 @@ export default function FunnelOverviewPage() {
             icon={FlaskConical}
             label="Гипотезы"
             value={hypotheses.length}
-            hint={hypotheses.length > 0 ? `топ ICE: ${top3[0]?.priorityScore ?? "—"}` : "нет гипотез"}
+            hint={hypotheses.length > 0 ? `топ: ${BUCKET_LABELS[top3[0]?.bucket ?? "quick_test"]?.label ?? "—"}` : "нет гипотез"}
             accent="orange"
             delay="0.20s"
           />
@@ -183,15 +217,17 @@ export default function FunnelOverviewPage() {
             icon={FileText}
             label="Эксперименты"
             value={experiments.length}
-            hint={experiments.length > 0 ? "активных" : "не запущено"}
+            hint={
+              experiments.length === 0
+                ? "не запущено"
+                : winRatePct === null || finishedExperiments.length === 0
+                  ? "нет завершённых"
+                  : `win-rate ${winRatePct}% (${finishedExperiments.length} закрытых)`
+            }
             accent="blue"
             delay="0.26s"
           />
         </div>
-
-        {!guest && authUser ? (
-          <TelegramConnectCard projectId={projectId} projectName={project.projectName} />
-        ) : null}
 
         {/* ── BOTTLENECK ─────────────────────────────────────── */}
         {diag.bottleneck && (
@@ -218,6 +254,94 @@ export default function FunnelOverviewPage() {
             </div>
           </div>
         )}
+
+        {/* ── EXPERIMENT HISTORY ─────────────────────────────── */}
+        {finishedExperiments.length > 0 ? (
+          <Collapsible defaultOpen={finishedExperiments.length <= 3}>
+            <section
+              className="overview-rise rounded-2xl border border-border/50 bg-card/20 overflow-hidden"
+              style={{ animationDelay: "0.24s" }}
+            >
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between gap-3 px-4 py-4 sm:px-5 hover:bg-muted/10 transition-colors text-left"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FlaskConical className="h-4 w-4 shrink-0 text-primary" />
+                    <div className="min-w-0">
+                      <h2 className="font-display text-lg font-semibold tracking-tight">
+                        История тестов · что узнали
+                      </h2>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {finishedExperiments.length} завершённых
+                        {winRatePct != null ? ` · win-rate ${winRatePct}%` : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform aria-expanded:rotate-180" />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <ul className="border-t border-border/40 divide-y divide-border/30 px-4 sm:px-5 pb-4">
+                  {finishedExperiments.slice(0, 8).map((ex: Experiment) => {
+                    const hyp = hypById.get(ex.hypothesisId);
+                    const dl = ex.decision
+                      ? EXPERIMENT_DECISION_RU[ex.decision]
+                      : null;
+                    return (
+                      <li key={ex.id} className="py-3.5 space-y-1">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <Badge variant="secondary" className="text-[10px] shrink-0">
+                            {hyp?.metricName ?? "Метрика"}
+                          </Badge>
+                          {dl ? (
+                            <Badge variant="outline" className="text-[10px] shrink-0">
+                              {dl}
+                            </Badge>
+                          ) : null}
+                          <span className="text-[10px] tabular-nums text-muted-foreground">
+                            {ex.endDate
+                              ? new Date(ex.endDate).toLocaleDateString("ru-RU")
+                              : "—"}
+                          </span>
+                        </div>
+                        <p className="text-sm font-medium leading-snug">
+                          {hyp?.title ?? "Гипотеза удалена или не найдена"}
+                        </p>
+                        {ex.afterValue?.trim() ? (
+                          <p className="text-xs text-muted-foreground">
+                            <span className="text-foreground/90 font-medium">Факт: </span>
+                            {ex.afterValue.trim()}
+                          </p>
+                        ) : null}
+                        {ex.result?.trim() ? (
+                          <p className="text-xs leading-relaxed">
+                            <span className="text-muted-foreground font-medium">Вывод: </span>
+                            {ex.result.trim()}
+                          </p>
+                        ) : null}
+                        {ex.notes?.includes("Рефлексия") ? (
+                          <p className="text-xs text-muted-foreground/95 border-l-2 border-primary/30 pl-2">
+                            {ex.notes.trim()}
+                          </p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="px-4 sm:px-5 pb-4">
+                  <Button asChild size="sm" variant="outline" className="w-full sm:w-auto text-xs">
+                    <Link to={`/projects/${projectId}/funnels/${funnel.id}/wizard/plan`}>
+                      План и завершённые
+                      <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                    </Link>
+                  </Button>
+                </div>
+              </CollapsibleContent>
+            </section>
+          </Collapsible>
+        ) : null}
 
         {/* ── TOP HYPOTHESES ─────────────────────────────────── */}
         <section>
@@ -263,29 +387,6 @@ export default function FunnelOverviewPage() {
               ))}
             </ul>
           )}
-        </section>
-
-        {/* ── QUICK ACTIONS ──────────────────────────────────── */}
-        <section className="overview-rise pt-2" style={{ animationDelay: "0.52s" }}>
-          <h2 className="font-display text-base font-semibold mb-3 text-muted-foreground">
-            Быстрые действия
-          </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-            {WIZARD_STEPS.filter((s) => ["materials", "metrics", "hypotheses", "plan"].includes(s.id)).map((step) => (
-              <Link
-                key={step.id}
-                to={`/projects/${projectId}/funnels/${funnel.id}/wizard/${step.id}`}
-                className="overview-quick-action group rounded-xl px-3 py-3 flex flex-col gap-1"
-              >
-                <span className="text-xs font-medium group-hover:text-primary transition-colors">
-                  {step.title}
-                </span>
-                <span className="text-[10px] text-muted-foreground leading-snug line-clamp-2">
-                  {step.subtitle}
-                </span>
-              </Link>
-            ))}
-          </div>
         </section>
       </div>
     </div>
@@ -391,6 +492,14 @@ function HypothesisCard({
               {hypo.metricName}
             </span>
           )}
+          {(hypo.tags ?? []).slice(0, 4).map((tag) => (
+            <span
+              key={tag}
+              className="text-[9px] text-muted-foreground border border-border/35 px-1.5 py-px rounded-full"
+            >
+              {tag}
+            </span>
+          ))}
         </div>
       </div>
 

@@ -9,11 +9,21 @@ type Props = {
   backLabel?: string;
   action?: React.ReactNode;
   className?: string;
+  /** Компактный заголовок — мастер воронки и второстепенные экраны */
+  compact?: boolean;
 };
 
-export function PageHeader({ title, subtitle, backTo, backLabel = "Назад", action, className }: Props) {
+export function PageHeader({
+  title,
+  subtitle,
+  backTo,
+  backLabel = "Назад",
+  action,
+  className,
+  compact,
+}: Props) {
   return (
-    <div className={cn("mb-6 space-y-3", className)}>
+    <div className={cn(compact ? "mb-4 space-y-2" : "mb-6 space-y-3", className)}>
       {backTo ? (
         <Link
           to={backTo}
@@ -24,9 +34,20 @@ export function PageHeader({ title, subtitle, backTo, backLabel = "Назад", 
         </Link>
       ) : null}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">{title}</h1>
-          {subtitle ? <p className="mt-1 text-sm text-muted-foreground max-w-2xl">{subtitle}</p> : null}
+        <div className="min-w-0">
+          <h1
+            className={cn(
+              "font-display font-bold tracking-tight truncate",
+              compact ? "text-xl sm:text-2xl" : "text-2xl sm:text-3xl",
+            )}
+          >
+            {title}
+          </h1>
+          {subtitle ? (
+            <p className={cn("text-muted-foreground max-w-2xl", compact ? "mt-0.5 text-xs" : "mt-1 text-sm")}>
+              {subtitle}
+            </p>
+          ) : null}
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}
       </div>

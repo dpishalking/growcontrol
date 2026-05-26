@@ -86,6 +86,7 @@ import {
 } from "@/services/funnelAuditService";
 import { runFunnelAuditApi } from "@/services/funnelAuditApi";
 import { normalizeFunnelAudit } from "@/lib/normalizeFunnelAudit";
+import { parseMetricNumber } from "@/lib/metricValueParse";
 import { getFunnelTypeTemplate } from "@/data/funnelTypes/catalog";
 import { buildAuditSyncSnapshot } from "@/utils/auditSync";
 import {
@@ -237,6 +238,11 @@ type AppDataContextValue = {
     afterValue: string,
     result: string,
     decision: ExperimentDecision,
+    options?: {
+      reflection?: string;
+      resultNumeric?: number | null;
+      applyMetricActual?: boolean;
+    },
   ) => Experiment | null;
 };
 
@@ -761,10 +767,44 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         if (e) persist(store);
         return e;
       },
-      finishExperimentAction: (id, afterValue, result, decision) => {
-        const e = finishExperiment(store, id, afterValue, result, decision);
+      finishExperimentAction: (id, afterValue, result, decision, options) => {
+        const e = finishExperiment(store, id, afterValue, result, decision, {
+          reflection: options?.reflection,
+          resultNumeric: options?.resultNumeric,
+        });
         if (e) {
+          if (decision === "scale" && options?.applyMetricActual) {
+            const parsed =
+              options.resultNumeric ?? parseMetricNumber(afterValue);
+            if (
+              parsed != null &&
+              !Number.isNaN(parsed) &&
+              Number.isFinite(parsed)
+            ) {
+              const hyp = getHypothesisById(store, e.hypothesisId);
+              if (hyp?.metricId) {
+                const beforeMetric = getMetricById(store, hyp.metricId);
+                const updated = updateFunnelMetric(store, hyp.metricId, {
+                  actualValue: parsed,
+                });
+                if (updated && beforeMetric) {
+                  maybeNotifyMetricRed(
+                    store,
+                    updated.funnelId,
+                    beforeMetric,
+                    updated,
+                    telegramEnabled,
+                  );
+                  maybeNotifyAuditStale(store, updated.funnelId, telegramEnabled);
+                }
+              }
+            }
+          }
           persist(store);
+          if (!guest && scopeUserId) {
+            const projectId = resolveProjectIdForFunnel(store, e.funnelId);
+            if (projectId) syncProjectForFunnel(e.funnelId, store);
+          }
           if (telegramEnabled) {
             const projectId = resolveProjectIdForFunnel(store, e.funnelId);
             if (projectId) {

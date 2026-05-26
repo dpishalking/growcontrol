@@ -7,7 +7,6 @@ import { wizardStepByIndex } from "@/features/wizard/wizardSteps";
 import { buildDiagnostics } from "@/utils/funnelDiagnostics";
 import { funnelNeedsResume, funnelResumeLabel, funnelResumePath } from "@/lib/funnelResume";
 import { getStorageScope, loadFocusDraft } from "@/features/quiz/quizDraftStorage";
-import { TelegramConnectCard } from "@/features/dashboard/TelegramConnectCard";
 import { DashboardFrame } from "@/features/dashboard/DashboardFrame";
 import { resolveProjectDisplayName, funnelCountLabel } from "@/lib/projectDisplayName";
 import type { Project } from "@/types/project";
@@ -18,7 +17,7 @@ type Props = {
 };
 
 export function ProjectFunnelsPanel({ project, onClose }: Props) {
-  const { user: authUser, guest } = useAuth();
+  const { user: authUser } = useAuth();
   const scope = getStorageScope(authUser?.id);
   const { projectFunnels, funnelMetricsList, funnelHypotheses } = useAppData();
 
@@ -79,12 +78,6 @@ export function ProjectFunnelsPanel({ project, onClose }: Props) {
               </Button>
             ))}
           </div>
-        </div>
-      ) : null}
-
-      {!guest && authUser ? (
-        <div className="border-b border-border px-4 py-4 sm:px-5">
-          <TelegramConnectCard projectId={projectId} projectName={displayName} compact />
         </div>
       ) : null}
 

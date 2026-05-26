@@ -10,6 +10,7 @@ export type FunnelTypeId =
   | "quiz"
   | "telegram_bot"
   | "offline_visit"
+  | "content_marketing"
   | "custom";
 
 export type FunnelStageDefinition = {

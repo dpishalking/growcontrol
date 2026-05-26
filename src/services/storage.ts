@@ -9,6 +9,30 @@ import type { AuditFinding } from "@/types/audit";
 import type { Hypothesis } from "@/types/hypothesis";
 import type { Experiment } from "@/types/experiment";
 
+function normalizeHypothesisFromStorage(raw: Hypothesis): Hypothesis {
+  const r = raw as Hypothesis & { tags?: unknown; minDataVolume?: unknown };
+  return {
+    ...raw,
+    tags: Array.isArray(r.tags)
+      ? (r.tags as string[]).map((x) => String(x).trim()).filter(Boolean)
+      : [],
+    minDataVolume:
+      typeof r.minDataVolume === "string" ? r.minDataVolume : "",
+  };
+}
+
+function normalizeExperimentFromStorage(raw: Experiment): Experiment {
+  return {
+    ...raw,
+    baselineNumeric:
+      raw.baselineNumeric === undefined ? null : raw.baselineNumeric,
+    targetNumeric: raw.targetNumeric === undefined ? null : raw.targetNumeric,
+    resultNumeric:
+      raw.resultNumeric === undefined ? null : raw.resultNumeric,
+    minDataVolume: raw.minDataVolume ?? "",
+  };
+}
+
 const STORAGE_KEY_BASE = "growcontrol_mock_v2";
 const GUEST_KEY = `${STORAGE_KEY_BASE}:guest`;
 const LEGACY_KEY = STORAGE_KEY_BASE;
@@ -61,8 +85,12 @@ export function loadStore(): MockStore | null {
       materials: parsed.materials ?? [],
       funnelMetrics: parsed.funnelMetrics ?? [],
       auditFindings: parsed.auditFindings ?? [],
-      hypotheses: parsed.hypotheses ?? [],
-      experiments: parsed.experiments ?? [],
+      hypotheses: (parsed.hypotheses ?? []).map((h: Hypothesis) =>
+        normalizeHypothesisFromStorage(h),
+      ),
+      experiments: (parsed.experiments ?? []).map((e: Experiment) =>
+        normalizeExperimentFromStorage(e),
+      ),
     };
   } catch {
     return null;

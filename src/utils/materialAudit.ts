@@ -47,6 +47,16 @@ const REQUIRED_STAGE: Partial<Record<FunnelTypeId, [RegExp, string][]>> = {
     [/форм|заявк/i, "lead"],
     [/скрипт|звон/i, "call"],
   ],
+  content_marketing: [
+    [/seo|поиск|organic|органик/i, "traffic"],
+    [/соц|telegram|youtube|instagram|vk|лента|пост/i, "traffic"],
+    [/статья|блог|видео|подкаст|контент/i, "content_entry"],
+    [/лид.?магнит|чек.?лист|гайд|pdf/i, "lead_magnet"],
+    [/email|рассыл|письм|серия|прогрев/i, "nurture"],
+    [/страниц.*услуг|оффер|лендинг/i, "lead"],
+    [/кейс|отзыв/i, "content_engagement"],
+    [/скрипт|созвон|продаж/i, "consultation"],
+  ],
 };
 
 const TYPE_HINT: Partial<Record<FunnelTypeId, [RegExp, MaterialType][]>> = {

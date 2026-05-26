@@ -49,6 +49,27 @@ const ONLINE_COURSE_RULES = `
 Различай: бесплатный/дешёвый лид-магнит → прогрев → продажа курса. Точка входа может не содержать цену основного курса.
 `.trim();
 
+const CONTENT_MARKETING_RULES = `
+### КОНТЕНТ-МАРКЕТИНГ (typeId: content_marketing)
+
+Inbound-воронка на органическом трафике: SEO, соцсети, блог, YouTube, рассылка. Платная реклама НЕ обязательна — не требуй «рекламный бюджет», CPC, ROAS как базовые метрики, если пользователь явно не ведёт платный трафик.
+
+Микро-цели по этапам:
+— traffic (органический охват): переходы из поиска, ленты, рекомендаций
+— content_entry / content_engagement: просмотр и вовлечение (дочитывание, досмотр, время)
+— lead_magnet: подписка / скачивание лид-магнита
+— nurture: прогревающая серия (email, мессенджер)
+— lead / consultation / sale: заявка, созвон, оплата
+
+НЕ считай проблемой:
+— Отсутствие рекламных креативов и медиабюджета
+— Отсутствие цены основного продукта в статье или видео
+— Мягкий CTA «скачать гайд» вместо «купить сейчас»
+— Длинный прогрев перед заявкой
+
+Оценивай продажу на этапах lead, consultation, sale — страница услуги, скрипт, оффер после прогрева.
+`.trim();
+
 const GENERAL = `
 ### ОБЩЕЕ ПРАВИЛО МНОГОШАГОВЫХ ВОРОНОК
 
@@ -63,5 +84,6 @@ export function funnelTypeAuditRules(typeId: string): string {
   if (id === "webinar") parts.push(WEBINAR_RULES);
   if (id === "consultation" || id === "service_lead") parts.push(CONSULTATION_RULES);
   if (id === "online_course") parts.push(ONLINE_COURSE_RULES);
+  if (id === "content_marketing") parts.push(CONTENT_MARKETING_RULES);
   return parts.join("\n\n");
 }

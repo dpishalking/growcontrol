@@ -36,7 +36,7 @@ export function DashboardProjectCard({ model, selected, onOpen }: Props) {
   return (
     <DashboardFrame
       variant={selected ? "primary" : "default"}
-      className="transition-transform duration-200 hover:scale-[1.01]"
+      className="transition-transform duration-300 ease-out motion-safe:hover:scale-[1.008]"
     >
       <button
         type="button"

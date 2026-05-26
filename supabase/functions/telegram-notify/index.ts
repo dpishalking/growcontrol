@@ -200,7 +200,7 @@ serve(async (req) => {
 
     const body = (await req.json()) as NotifyBody;
 
-    if (!body.appProjectId || !body.event) {
+    if (!body.event) {
       return json({ ok: false, reason: "invalid_payload" }, 400);
     }
 
@@ -214,9 +214,15 @@ serve(async (req) => {
       return json({ ok: false, reason: "unauthorized" }, 401);
     }
 
+    const appProjectId =
+      typeof body.appProjectId === "string" ? body.appProjectId.trim() : "";
+    if (!appProjectId) {
+      return json({ ok: false, reason: "project_not_found" }, 400);
+    }
+
     const { data: chatsRaw, error: chatsError } = await userClient.rpc(
       "get_project_telegram_chats",
-      { p_app_id: body.appProjectId },
+      { p_app_id: appProjectId },
     );
 
     if (chatsError) {
@@ -225,7 +231,7 @@ serve(async (req) => {
       if (msg.includes("not authenticated")) {
         return json({ ok: false, reason: "unauthorized" }, 401);
       }
-      return json({ ok: false, reason: "project_not_found" }, 403);
+      return json({ ok: false, reason: "chat_lookup_failed" }, 403);
     }
 
     const chats = (Array.isArray(chatsRaw) ? chatsRaw : []) as { chat_id?: string }[];

@@ -595,6 +595,94 @@ const OFFLINE_VISIT = buildType(
   ["Стоимость записи", "Записи", "Доходимость", "Визиты", "Средний чек", "LTV"],
 );
 
+const CONTENT_MARKETING = buildType(
+  "content_marketing",
+  "Воронка контент-маркетинга",
+  "Рост через органику: SEO, соцсети, блог или YouTube — без обязательной рекламы. Контент → подписка → прогрев → заявка и продажа.",
+  "органика → контент → подписка → прогрев → заявка → продажа",
+  [
+    { id: "traffic", label: "Органический охват" },
+    { id: "content_entry", label: "Вход в контент" },
+    { id: "content_engagement", label: "Вовлечение" },
+    { id: "lead_magnet", label: "Лид-магнит / подписка" },
+    { id: "nurture", label: "Прогревающая серия" },
+    { id: "lead", label: "Заявка" },
+    { id: "consultation", label: "Консультация / созвон" },
+    { id: "sale", label: "Продажа" },
+    { id: "loyalty", label: "Повтор / рекомендации" },
+  ],
+  [
+    m("traffic", "Органические переходы", "шт", "higher_better", true, 4),
+    m("traffic", "Охват публикаций", "шт", "higher_better", true, 3),
+    m("traffic", "CTR из поиска / ленты", "%", "higher_better", true, 4),
+    m("content_entry", "Просмотры контента", "шт", "higher_better", true, 3),
+    m("content_engagement", "Дочитывание / досмотр", "%", "higher_better", true, 4),
+    m("content_engagement", "Среднее время в контенте", "мин", "higher_better", false, 3),
+    m("lead_magnet", "Конверсия контента в подписку", "%", "higher_better", true, 5),
+    m("lead_magnet", "Новые подписчики", "шт", "higher_better", true, 4),
+    m("nurture", "Open rate писем", "%", "higher_better", true, 4),
+    m("nurture", "Click rate в серии", "%", "higher_better", true, 4),
+    m("lead", "Конверсия подписчика в заявку", "%", "higher_better", true, 5),
+    m("lead", "Заявки", "шт", "higher_better", true, 5),
+    m("consultation", "Конверсия заявки в созвон", "%", "higher_better", true, 4),
+    m("sale", "Конверсия заявки в продажу", "%", "higher_better", true, 5),
+    m("sale", "Продажи", "шт", "higher_better", true, 5),
+    m("sale", "Средний чек", "₽", "higher_better", true, 5),
+    m("sale", "Выручка", "₽", "higher_better", true, 5),
+    m("sale", "Прибыль", "₽", "higher_better", true, 5),
+  ],
+  [
+    "Статья / SEO-страница",
+    "Пост в соцсетях",
+    "Видео / подкаст",
+    "Лид-магнит",
+    "Страница подписки",
+    "Email-серия",
+    "Страница услуги",
+    "Кейсы",
+    "CTA в контенте",
+    "Скрипт продаж",
+  ],
+  [
+    "Мало органического охвата",
+    "Контент не попадает в боль аудитории",
+    "Слабый лид-магнит",
+    "Мало подписок с контента",
+    "Прогрев не ведёт к заявке",
+    "Заявки есть, но не покупают",
+  ],
+  [
+    "Органические переходы",
+    "Конверсия контента в подписку",
+    "Конверсия подписчика в заявку",
+    "Конверсия заявки в продажу",
+  ],
+  [
+    "Органические переходы",
+    "Просмотры контента",
+    "Подписки",
+    "Заявки",
+    "Продажи",
+    "Выручка",
+    "Прибыль",
+  ],
+  dirs([
+    "конверсия контента в подписку",
+    [
+      {
+        change: "Усилить лид-магнит и CTA внутри контента",
+        rationale: "Подписка — мост между просмотром и продажей",
+        materialsToChange: ["Лид-магнит", "CTA в контенте"],
+        testMethod: "A/B оффера лид-магнита",
+        complexity: 2,
+        impact: 4,
+        confidence: 4,
+        ease: 4,
+      },
+    ],
+  ]),
+);
+
 const CUSTOM: FunnelTypeTemplate = {
   id: "custom",
   name: "Кастомная воронка",
@@ -635,6 +723,7 @@ export const FUNNEL_TYPE_CATALOG: FunnelTypeTemplate[] = [
   QUIZ,
   TELEGRAM_BOT,
   OFFLINE_VISIT,
+  CONTENT_MARKETING,
   CUSTOM,
 ];
 
@@ -661,6 +750,8 @@ export function suggestFunnelTypeFromQuiz(answers: {
   if (firstAction === "bot") return "telegram_bot";
   if (firstAction === "visit") return "offline_visit";
   if (firstAction === "register" && salePoint === "webinar") return "webinar";
+  if (firstAction === "register" && moneyEvent === "payment") return "online_course";
+  if (firstAction === "register" && salePoint === "site") return "content_marketing";
   if (firstAction === "register") return "subscription";
   if (firstAction === "buy" && moneyEvent === "buyout") return "product_delivery";
   if (salePoint === "webinar") return "webinar";
@@ -668,7 +759,6 @@ export function suggestFunnelTypeFromQuiz(answers: {
   if (salePoint === "delivery") return "product_delivery";
   if (salePoint === "messenger") return "telegram_bot";
   if (moneyEvent === "subscription" || moneyEvent === "renewal") return "subscription";
-  if (firstAction === "register" && moneyEvent === "payment") return "online_course";
   if (firstAction === "lead" && (salePoint === "call" || salePoint === "site")) {
     if (moneyEvent === "visit") return "consultation";
     return "service_lead";

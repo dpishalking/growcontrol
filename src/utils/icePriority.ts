@@ -33,6 +33,56 @@ export const BUCKET_LABELS: Record<HypothesisBucket, { label: string; hint: stri
   do_not_touch: { label: "Не трогать", hint: "Дорого/рискованно или вне ограничителя" },
 };
 
+/** Порядок секций ICE на экране выбора гипотез. */
+export const BUCKET_ORDER: HypothesisBucket[] = [
+  "quick_test",
+  "strategic",
+  "uncertain",
+  "do_not_touch",
+];
+
+export const BUCKET_SECTION_STYLES: Record<
+  HypothesisBucket,
+  { border: string; headerBg: string; accent: string }
+> = {
+  quick_test: {
+    border: "border-emerald-500/30",
+    headerBg: "bg-emerald-500/10",
+    accent: "text-emerald-400",
+  },
+  strategic: {
+    border: "border-primary/30",
+    headerBg: "bg-primary/10",
+    accent: "text-primary",
+  },
+  uncertain: {
+    border: "border-yellow-500/30",
+    headerBg: "bg-yellow-500/10",
+    accent: "text-yellow-400",
+  },
+  do_not_touch: {
+    border: "border-border/50",
+    headerBg: "bg-muted/25",
+    accent: "text-muted-foreground",
+  },
+};
+
+export function groupHypothesesByBucket(
+  hypotheses: Hypothesis[],
+): Partial<Record<HypothesisBucket, Hypothesis[]>> {
+  const groups = Object.fromEntries(
+    BUCKET_ORDER.map((bucket) => [bucket, [] as Hypothesis[]]),
+  ) as Record<HypothesisBucket, Hypothesis[]>;
+
+  for (const h of sortByPriority(hypotheses)) {
+    groups[h.bucket].push(h);
+  }
+
+  return Object.fromEntries(BUCKET_ORDER.map((bucket) => [bucket, groups[bucket]]).filter(
+    ([, items]) => (items as Hypothesis[]).length > 0,
+  )) as Partial<Record<HypothesisBucket, Hypothesis[]>>;
+}
+
 export function sortByPriority(hypotheses: Hypothesis[]): Hypothesis[] {
   return [...hypotheses].sort((a, b) => b.priorityScore - a.priorityScore);
 }

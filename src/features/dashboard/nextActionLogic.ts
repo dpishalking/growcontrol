@@ -91,8 +91,8 @@ export function computeDashboardNextAction(
         eyebrow: target.displayName,
         title: `${target.redMetrics} ${target.redMetrics === 1 ? "метрика" : "метрик"} ниже плана`,
         description: "Сгенерируйте гипотезы по узкому месту и поставьте тест.",
-        cta: "К сигналам",
-        href: `/projects/${target.project.id}/funnels/${f.id}/wizard/signals`,
+        cta: "К гипотезам",
+        href: `/projects/${target.project.id}/funnels/${f.id}/wizard/hypotheses`,
       };
     }
   }
@@ -119,4 +119,17 @@ export function computeDashboardNextAction(
   }
 
   return null;
+}
+
+export function findRedMetricsHref(snapshot: DashboardSnapshot): string | null {
+  const target = snapshot.projectCards.find((c) => c.redMetrics > 0);
+  const funnel = target?.funnels[0];
+  if (!target || !funnel) return null;
+  return `/projects/${target.project.id}/funnels/${funnel.id}/wizard/hypotheses`;
+}
+
+export function findPrimaryTestHref(snapshot: DashboardSnapshot): string | null {
+  const item = snapshot.activeTests[0];
+  if (!item) return null;
+  return `/projects/${item.projectId}/funnels/${item.hypothesis.funnelId}/wizard/plan`;
 }

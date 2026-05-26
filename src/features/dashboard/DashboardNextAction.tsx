@@ -67,7 +67,6 @@ export function DashboardNextActionCard({ action, onCreateProject }: Props) {
             className={cn(
               "dashboard-cta-shimmer h-12 shrink-0 px-8 text-base font-semibold",
               "bg-gradient-money text-primary-foreground shadow-glow",
-              "transition-transform hover:scale-[1.03] active:scale-[0.98]",
             )}
           >
             <Sparkles className="mr-2 h-4 w-4" />
@@ -80,7 +79,6 @@ export function DashboardNextActionCard({ action, onCreateProject }: Props) {
             className={cn(
               "dashboard-cta-shimmer h-12 shrink-0 px-8 text-base font-semibold",
               "bg-gradient-money text-primary-foreground shadow-glow",
-              "transition-transform hover:scale-[1.03] active:scale-[0.98]",
             )}
           >
             <Link to={action.href}>
