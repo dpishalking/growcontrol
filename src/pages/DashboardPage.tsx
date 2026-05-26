@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { FolderKanban, FlaskConical, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,11 +21,12 @@ import { DashboardStatusBar } from "@/features/dashboard/DashboardStatusBar";
 import { DashboardZone } from "@/features/dashboard/DashboardZone";
 import { ProjectFunnelsPanel } from "@/features/dashboard/ProjectFunnelsPanel";
 import { useDashboardSnapshot } from "@/features/dashboard/useDashboardSnapshot";
+import { getStorageScope } from "@/features/quiz/quizDraftStorage";
 import { useAppData } from "@/context/AppDataContext";
 import { useAuth } from "@/hooks/useAuth";
 import { BILLING_ENABLED } from "@/lib/productFlags";
 import { resolveProjectOpenTarget } from "@/lib/projectNavigation";
-import { getStorageScope } from "@/features/quiz/quizDraftStorage";
+import { resolveProjectDisplayName } from "@/lib/projectDisplayName";
 
 function contextLine(
   projectCount: number,
@@ -62,7 +63,12 @@ export default function DashboardPage() {
     funnelMetricsList,
     experimentByHypothesis,
     createEmptyProject,
+    syncGenericProjectNames,
   } = useAppData();
+
+  useEffect(() => {
+    syncGenericProjectNames();
+  }, [syncGenericProjectNames]);
 
   const [newOpen, setNewOpen] = useState(false);
   const [newName, setNewName] = useState("");
@@ -80,6 +86,10 @@ export default function DashboardPage() {
   const heroContext = contextLine(snapshot.totals.projects, nextAction);
   const visibleTests = snapshot.activeTests.slice(0, 5);
   const hasProjects = snapshot.totals.projects > 0;
+
+  const selectedDisplayName = selectedProject
+    ? resolveProjectDisplayName(selectedProject, projectFunnels(selectedProject.id))
+    : "";
 
   const handleCreate = () => {
     if (BILLING_ENABLED && !canAddProject) return;
@@ -210,7 +220,7 @@ export default function DashboardPage() {
       {selectedProject ? (
         <DashboardZone
           step="05"
-          title={selectedProject.projectName}
+          title={selectedDisplayName}
           subtitle="Воронки и подключения"
           className="animate-in fade-in slide-in-from-bottom-2 duration-300"
         >

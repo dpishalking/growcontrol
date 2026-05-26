@@ -1,6 +1,8 @@
 import type { CreateProjectFromIntakeInput, Project } from "@/types/project";
+import { isGenericProjectName, primaryFunnelProductName } from "@/lib/projectDisplayName";
 import { calculateCompleteness, intakeToProjectFields } from "@/utils/completeness";
 import { createId, nowIso } from "@/utils/id";
+import { getFunnelsByProject } from "./funnelService";
 import type { MockStore } from "./storage";
 
 export function getProjects(store: MockStore): Project[] {
@@ -84,4 +86,23 @@ export function updateProject(store: MockStore, projectId: string, patch: Partia
 
 export function canCreateProject(store: MockStore, maxProjects: number): boolean {
   return store.projects.length < maxProjects;
+}
+
+/** Если проект ещё «Новый проект», подставить productName из воронки. */
+export function syncProjectNameFromFunnels(store: MockStore, projectId: string): Project | null {
+  const project = getProjectById(store, projectId);
+  if (!project || !isGenericProjectName(project.projectName)) return null;
+
+  const name = primaryFunnelProductName(getFunnelsByProject(store, projectId));
+  if (!name || isGenericProjectName(name)) return null;
+
+  return updateProject(store, projectId, { projectName: name });
+}
+
+export function syncAllGenericProjectNames(store: MockStore): number {
+  let updated = 0;
+  for (const project of store.projects) {
+    if (syncProjectNameFromFunnels(store, project.id)) updated += 1;
+  }
+  return updated;
 }

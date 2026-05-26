@@ -1,6 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Experiment } from "@/types/experiment";
+import { wizardStepByIndex } from "@/features/wizard/wizardSteps";
 import type { Hypothesis, HypothesisStatus } from "@/types/hypothesis";
+import { buildHypothesisSyncDescription } from "@/lib/hypothesisPresentation";
 import type { Project } from "@/types/project";
 import type { MockStore } from "./storage";
 
@@ -9,13 +11,17 @@ function projectStats(store: MockStore, projectId: string) {
   const funnelIds = new Set(funnels.map((f) => f.id));
   const hypotheses = store.hypotheses.filter((h) => funnelIds.has(h.funnelId));
   const testing = hypotheses.filter((h) => h.status === "testing").length;
-  const maxStep = funnels.reduce((max, f) => Math.max(max, f.wizardStep ?? 0), 0);
+  const queued = hypotheses.filter((h) => h.status === "backlog").length;
+  const maxStep = funnels.reduce((max, f) => Math.max(max, f.currentWizardStep ?? 0), 0);
+  const stepInfo = maxStep > 0 ? wizardStepByIndex(maxStep) : null;
 
   return {
     funnelCount: funnels.length,
     hypothesesCount: hypotheses.length,
     hypothesesTesting: testing,
+    hypothesesQueued: queued,
     maxWizardStep: maxStep,
+    wizardStepTitle: stepInfo?.title ?? null,
   };
 }
 
@@ -49,11 +55,10 @@ function mapHypothesisPriority(score: number): "high" | "medium" | "low" {
 }
 
 function hypothesisToRemotePayload(h: Hypothesis) {
-  const descriptionParts = [h.ifChange, h.thenMetric, h.becauseReason].filter(Boolean);
   return {
     app_id: h.id,
     title: h.title,
-    description: descriptionParts.join(" → ").slice(0, 2000) || null,
+    description: buildHypothesisSyncDescription(h),
     status: mapHypothesisStatus(h.status),
     priority: mapHypothesisPriority(h.priorityScore),
     expected_impact: h.thenMetric || h.metricName || null,

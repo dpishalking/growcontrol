@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { resolveProjectDisplayName } from "@/lib/projectDisplayName";
 import { buildDiagnostics } from "@/utils/funnelDiagnostics";
 import { funnelNeedsResume } from "@/lib/funnelResume";
 import { wizardStepByIndex } from "@/features/wizard/wizardSteps";
@@ -12,6 +13,7 @@ type ActiveItem = { hypothesis: Hypothesis; projectId: string; projectName: stri
 export type ProjectCardModel = {
   project: Project;
   funnels: Funnel[];
+  displayName: string;
   funnelCount: number;
   resumeCount: number;
   redMetrics: number;
@@ -49,6 +51,7 @@ export function useDashboardSnapshot(
 
     const projectCards: ProjectCardModel[] = projects.map((project) => {
       const funnels = projectFunnels(project.id);
+      const displayName = resolveProjectDisplayName(project, funnels);
       totalFunnels += funnels.length;
 
       let redMetrics = 0;
@@ -69,7 +72,7 @@ export function useDashboardSnapshot(
             activeTests.push({
               hypothesis: h,
               projectId: project.id,
-              projectName: project.projectName,
+              projectName: displayName,
             });
           }
         }
@@ -98,6 +101,7 @@ export function useDashboardSnapshot(
       return {
         project,
         funnels,
+        displayName,
         funnelCount: funnels.length,
         resumeCount,
         redMetrics,

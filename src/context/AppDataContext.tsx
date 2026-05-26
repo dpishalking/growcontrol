@@ -14,6 +14,8 @@ import {
   createProjectFromIntake,
   getProjectById,
   getProjects,
+  syncAllGenericProjectNames,
+  syncProjectNameFromFunnels,
   updateProject,
 } from "@/services/projectService";
 import {
@@ -147,6 +149,7 @@ type AppDataContextValue = {
   createProject: (input: CreateProjectFromIntakeInput) => Project | null;
   createEmptyProject: (name: string) => Project | null;
   patchProject: (projectId: string, patch: Partial<Project>) => Project | null;
+  syncGenericProjectNames: () => void;
 
   // Billing
   currentPlan: ReturnType<typeof getCurrentPlan>;
@@ -323,6 +326,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setStore((s) => ({ ...s }));
   }, []);
 
+  const syncGenericProjectNames = useCallback(() => {
+    const count = syncAllGenericProjectNames(store);
+    if (count > 0) {
+      saveStore(store);
+      setStore({ ...store });
+    }
+  }, [store]);
+
   const value = useMemo<AppDataContextValue>(() => {
     const maxProjects = getMaxProjectsForPlan(store.user.plan);
     const telegramEnabled = !guest && Boolean(scopeUserId);
@@ -357,6 +368,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         }
         return p;
       },
+      syncGenericProjectNames,
 
       // Billing
       currentPlan: getCurrentPlan(store),
@@ -393,11 +405,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       createFunnelFocus: (input) => {
         const f = createFunnel(store, input);
         persist(store);
+        syncProjectNameFromFunnels(store, input.projectId);
+        persist(store);
         return f;
       },
       updateFunnelPatch: (id, patch) => {
         const f = updateFunnel(store, id, patch);
-        if (f) persist(store);
+        if (f) {
+          if (patch.productName?.trim()) {
+            syncProjectNameFromFunnels(store, f.projectId);
+          }
+          persist(store);
+        }
         return f;
       },
       setFunnelStep: (id, step) => {
@@ -758,7 +777,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         return e;
       },
     };
-  }, [store, persist, refresh, syncProject, syncProjectForFunnel, scopeUserId, guest]);
+  }, [store, persist, refresh, syncProject, syncProjectForFunnel, syncGenericProjectNames, scopeUserId, guest]);
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;
 }

@@ -59,7 +59,7 @@ export function computeDashboardNextAction(
     if (resumeFunnel) {
       return {
         tone: "focus",
-        eyebrow: card.project.projectName,
+        eyebrow: card.displayName,
         title: resumeFunnel.productName || "Продолжить воронку",
         description: `Мастер на ${card.progressPercent}% — следующий шаг уже ждёт.`,
         cta: "Продолжить",
@@ -88,7 +88,7 @@ export function computeDashboardNextAction(
       const f = target.funnels[0];
       return {
         tone: "focus",
-        eyebrow: target.project.projectName,
+        eyebrow: target.displayName,
         title: `${target.redMetrics} ${target.redMetrics === 1 ? "метрика" : "метрик"} ниже плана`,
         description: "Сгенерируйте гипотезы по узкому месту и поставьте тест.",
         cta: "К сигналам",

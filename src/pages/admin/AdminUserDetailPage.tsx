@@ -1,18 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { profileIdentifier } from "@/lib/authLogin";
-import {
-  HYPOTHESIS_PRIORITY_LABELS,
-  HYPOTHESIS_STATUS_LABELS,
-  HYPOTHESIS_STATUS_TONE,
-} from "@/lib/admin/hypothesisLabels";
+import { AdminHypothesisCard } from "@/components/admin/AdminHypothesisCard";
+import { AdminProjectPlanPanel } from "@/components/admin/AdminProjectPlanPanel";
+import { buildProjectPlanOfAction } from "@/lib/admin/projectPlanOfAction";
 import { formatDate } from "@/utils/format";
-import { cn } from "@/lib/utils";
 
 type Profile = {
   user_id: string;
@@ -24,6 +21,7 @@ type Profile = {
 type ProjectRow = {
   id: string;
   name: string;
+  description: string | null;
   status: string;
   last_activity_at: string;
   metadata: Record<string, unknown> | null;
@@ -32,11 +30,23 @@ type ProjectRow = {
 type HypothesisRow = {
   id: string;
   project_id: string;
+  app_id: string | null;
   title: string;
   description: string | null;
   status: string;
   priority: string;
+  expected_impact: string | null;
   created_at: string;
+};
+
+type ExperimentRow = {
+  project_id: string;
+  hypothesis_id: string | null;
+  app_hyp_id: string | null;
+  owner: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  status: string;
 };
 
 type EventRow = {
@@ -53,6 +63,7 @@ export default function AdminUserDetailPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [hypotheses, setHypotheses] = useState<HypothesisRow[]>([]);
+  const [experiments, setExperiments] = useState<ExperimentRow[]>([]);
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +80,7 @@ export default function AdminUserDetailPage() {
             .maybeSingle(),
           supabase
             .from("projects")
-            .select("id,name,status,last_activity_at,metadata")
+            .select("id,name,description,status,last_activity_at,metadata")
             .eq("user_id", userId)
             .order("last_activity_at", { ascending: false }),
         ]);
@@ -82,12 +93,20 @@ export default function AdminUserDetailPage() {
 
         if (projectRows.length > 0) {
           const ids = projectRows.map((p) => p.id);
-          const [hy, ev] = await Promise.all([
+          const [hy, ex, ev] = await Promise.all([
             supabase
               .from("hypotheses")
-              .select("id,project_id,title,description,status,priority,created_at")
+              .select(
+                "id,project_id,app_id,title,description,status,priority,expected_impact,created_at",
+              )
               .in("project_id", ids)
               .order("created_at", { ascending: false }),
+            supabase
+              .from("experiments")
+              .select(
+                "project_id,hypothesis_id,app_hyp_id,owner,start_date,end_date,status",
+              )
+              .in("project_id", ids),
             supabase
               .from("project_events")
               .select("id,title,event_type,description,created_at,project_id")
@@ -97,10 +116,12 @@ export default function AdminUserDetailPage() {
           ]);
           if (!cancel) {
             if (!hy.error) setHypotheses((hy.data ?? []) as HypothesisRow[]);
+            if (!ex.error) setExperiments((ex.data ?? []) as ExperimentRow[]);
             if (!ev.error) setEvents((ev.data ?? []) as EventRow[]);
           }
         } else {
           setHypotheses([]);
+          setExperiments([]);
           setEvents([]);
         }
       } catch (e) {
@@ -196,7 +217,7 @@ export default function AdminUserDetailPage() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Проекты и гипотезы</CardTitle>
+          <CardTitle className="text-base">Проекты и план действий</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
           {projects.length === 0 ? (
@@ -207,9 +228,20 @@ export default function AdminUserDetailPage() {
                 completenessScore?: number;
                 funnelCount?: number;
                 hypothesesTesting?: number;
+                hypothesesQueued?: number;
                 maxWizardStep?: number;
+                wizardStepTitle?: string | null;
+                mainGoal?: string;
+                northStarMetric?: string;
               };
               const projectHypotheses = hypothesesByProject.get(p.id) ?? [];
+              const plan = buildProjectPlanOfAction(
+                p.id,
+                meta,
+                p.description,
+                hypotheses,
+                experiments,
+              );
 
               return (
                 <div key={p.id} className="rounded-lg border border-border/50 overflow-hidden">
@@ -224,10 +256,14 @@ export default function AdminUserDetailPage() {
                       <span>Заполненность: {meta.completenessScore ?? 0}%</span>
                       <span>Воронок: {meta.funnelCount ?? 0}</span>
                       <span>Гипотез: {projectHypotheses.length}</span>
-                      <span>В тесте: {meta.hypothesesTesting ?? 0}</span>
-                      <span>Шаг визарда: {meta.maxWizardStep ?? 0}</span>
+                      <span>В тесте: {plan.activeTests.length}</span>
+                      <span>В очереди: {plan.queue.length}</span>
                       <span>Активность: {formatDate(p.last_activity_at)}</span>
                     </div>
+                  </div>
+
+                  <div className="border-t border-border/30 p-3">
+                    <AdminProjectPlanPanel plan={plan} />
                   </div>
 
                   {projectHypotheses.length === 0 ? (
@@ -235,48 +271,17 @@ export default function AdminUserDetailPage() {
                       Гипотез в этом проекте пока нет.
                     </p>
                   ) : (
-                    <div className="overflow-x-auto border-t border-border/30">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="border-b border-border/40 text-[10px] uppercase tracking-wider text-muted-foreground">
-                            <th className="text-left py-2 px-3 font-medium">Гипотеза</th>
-                            <th className="text-left py-2 px-3 font-medium">Статус</th>
-                            <th className="text-left py-2 px-3 font-medium">Приоритет</th>
-                            <th className="text-right py-2 px-3 font-medium">Создана</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {projectHypotheses.map((h) => (
-                            <tr key={h.id} className="border-b border-border/20 last:border-0">
-                              <td className="py-2 px-3 font-medium max-w-[320px]">
-                                <div className="truncate" title={h.title}>
-                                  {h.title}
-                                </div>
-                                {h.description ? (
-                                  <div className="text-[11px] text-muted-foreground truncate mt-0.5" title={h.description}>
-                                    {h.description}
-                                  </div>
-                                ) : null}
-                              </td>
-                              <td className="py-2 px-3">
-                                <Badge
-                                  variant="outline"
-                                  className={cn("chip text-[10px]", HYPOTHESIS_STATUS_TONE[h.status] ?? "chip")}
-                                >
-                                  {HYPOTHESIS_STATUS_LABELS[h.status] ?? h.status}
-                                </Badge>
-                              </td>
-                              <td className="py-2 px-3 text-muted-foreground">
-                                {HYPOTHESIS_PRIORITY_LABELS[h.priority] ?? h.priority}
-                              </td>
-                              <td className="py-2 px-3 text-right text-muted-foreground tabular-nums whitespace-nowrap">
-                                {formatDate(h.created_at)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    <details className="border-t border-border/30 group">
+                      <summary className="cursor-pointer list-none px-3 py-2.5 text-xs font-medium text-muted-foreground hover:text-foreground flex items-center justify-between">
+                        <span>Подробнее по гипотезам ({projectHypotheses.length})</span>
+                        <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+                      </summary>
+                      <div className="px-3 pb-3 space-y-3">
+                        {projectHypotheses.map((h) => (
+                          <AdminHypothesisCard key={h.id} hypothesis={h} />
+                        ))}
+                      </div>
+                    </details>
                   )}
                 </div>
               );

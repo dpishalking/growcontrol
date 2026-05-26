@@ -9,6 +9,7 @@ import { funnelNeedsResume, funnelResumeLabel, funnelResumePath } from "@/lib/fu
 import { getStorageScope, loadFocusDraft } from "@/features/quiz/quizDraftStorage";
 import { TelegramConnectCard } from "@/features/dashboard/TelegramConnectCard";
 import { DashboardFrame } from "@/features/dashboard/DashboardFrame";
+import { resolveProjectDisplayName, funnelCountLabel } from "@/lib/projectDisplayName";
 import type { Project } from "@/types/project";
 
 type Props = {
@@ -23,6 +24,7 @@ export function ProjectFunnelsPanel({ project, onClose }: Props) {
 
   const projectId = project.id;
   const funnels = projectFunnels(projectId);
+  const displayName = resolveProjectDisplayName(project, funnels);
   const focusDraft = loadFocusDraft(scope, projectId);
   const draftFunnels = funnels.filter((f) => funnelNeedsResume(f));
 
@@ -31,10 +33,12 @@ export function ProjectFunnelsPanel({ project, onClose }: Props) {
       <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/25 px-4 py-3.5 sm:px-5">
         <div className="min-w-0">
           <p className="truncate font-display text-base font-semibold text-foreground">
-            {project.projectName}
+            {displayName}
           </p>
           <p className="text-xs text-muted-foreground">
-            {funnels.length === 0 ? "Создайте первую воронку" : `${funnels.length} воронок в проекте`}
+            {funnels.length === 0
+              ? "Создайте первую воронку"
+              : `${funnelCountLabel(funnels.length)} в проекте`}
           </p>
         </div>
         <div className="flex shrink-0 gap-1.5">
@@ -80,7 +84,7 @@ export function ProjectFunnelsPanel({ project, onClose }: Props) {
 
       {!guest && authUser ? (
         <div className="border-b border-border px-4 py-4 sm:px-5">
-          <TelegramConnectCard projectId={projectId} projectName={project.projectName} compact />
+          <TelegramConnectCard projectId={projectId} projectName={displayName} compact />
         </div>
       ) : null}
 

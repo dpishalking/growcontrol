@@ -27,7 +27,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useAppData } from "@/context/AppDataContext";
+import { HypothesisStructure } from "@/features/hypotheses/HypothesisStructure";
+import { hypothesisDisplayParts } from "@/lib/hypothesisPresentation";
 import { WizardLayout } from "@/features/wizard/WizardLayout";
 import { getFunnelTypeTemplate } from "@/data/funnelTypes/catalog";
 import { auditDraftsForMetric } from "@/lib/hypothesisMetricContext";
@@ -427,7 +428,8 @@ function HypoCard({
 }) {
   const [open, setOpen] = useState(false);
   const isSelected = h.status === "backlog" || h.status === "testing";
-  const preview = h.thenMetric.trim();
+  const parts = hypothesisDisplayParts(h);
+  const hasExtraDetails = Boolean(parts.testMethod || parts.successCriteria);
 
   return (
     <li
@@ -451,11 +453,16 @@ function HypoCard({
         >
           {isSelected ? <Check className="h-3.5 w-3.5 text-primary-foreground" /> : null}
         </span>
-        <div className="min-w-0 flex-1 space-y-1">
+        <div className="min-w-0 flex-1 space-y-2">
           <p className="text-sm font-medium leading-relaxed break-words">{h.title}</p>
-          {preview ? (
-            <p className="text-xs text-muted-foreground leading-relaxed break-words">→ {preview}</p>
-          ) : null}
+          <HypothesisStructure
+            ifText={
+              parts.ifChange && parts.ifChange !== h.title.trim() ? parts.ifChange : null
+            }
+            thenText={parts.thenMetric}
+            becauseText={parts.becauseReason}
+            compact
+          />
           <div className="flex items-center gap-1.5 flex-wrap">
             <Badge variant="secondary" className="text-[10px]">
               ICE {h.priorityScore}
@@ -472,57 +479,64 @@ function HypoCard({
         </div>
       </button>
 
-      <Collapsible open={open} onOpenChange={setOpen}>
-        <div className="px-4 pb-3">
-          <div className="flex items-center justify-between gap-2">
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1"
-              >
-                <ChevronDown
-                  className={cn("h-3 w-3 transition-transform", open && "rotate-180")}
-                />
-                {open ? "Свернуть" : "Подробнее"}
-              </button>
-            </CollapsibleTrigger>
-            {!isSelected ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete();
-                }}
-                className="text-[11px] text-muted-foreground hover:text-destructive flex items-center gap-1"
-              >
-                <Trash2 className="h-3 w-3" />
-                Удалить
-              </button>
-            ) : null}
-          </div>
-          <CollapsibleContent>
-            <dl className="grid gap-1.5 text-xs pt-3 border-t border-border/40 mt-3">
-              <DetailRow label="Если" value={h.ifChange} />
-              <DetailRow label="То" value={h.thenMetric} />
-              <DetailRow label="Потому что" value={h.becauseReason} />
-              {h.testMethod ? <DetailRow label="Как проверить" value={h.testMethod} /> : null}
-              {h.successCriteria ? (
-                <DetailRow label="Успех" value={h.successCriteria} />
+      {hasExtraDetails ? (
+        <Collapsible open={open} onOpenChange={setOpen}>
+          <div className="px-4 pb-3">
+            <div className="flex items-center justify-between gap-2">
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1"
+                >
+                  <ChevronDown
+                    className={cn("h-3 w-3 transition-transform", open && "rotate-180")}
+                  />
+                  {open ? "Свернуть" : "Как проверить"}
+                </button>
+              </CollapsibleTrigger>
+              {!isSelected ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete();
+                  }}
+                  className="text-[11px] text-muted-foreground hover:text-destructive flex items-center gap-1"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  Удалить
+                </button>
               ) : null}
-            </dl>
-          </CollapsibleContent>
-        </div>
-      </Collapsible>
+            </div>
+            <CollapsibleContent>
+              <div className="pt-3 border-t border-border/40 mt-3">
+                <HypothesisStructure
+                  ifText={null}
+                  testMethod={parts.testMethod}
+                  successCriteria={parts.successCriteria}
+                  compact
+                />
+              </div>
+            </CollapsibleContent>
+          </div>
+        </Collapsible>
+      ) : (
+        !isSelected ? (
+          <div className="px-4 pb-3 flex justify-end">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              className="text-[11px] text-muted-foreground hover:text-destructive flex items-center gap-1"
+            >
+              <Trash2 className="h-3 w-3" />
+              Удалить
+            </button>
+          </div>
+        ) : null
+      )}
     </li>
-  );
-}
-
-function DetailRow({ label, value }: { label: string; value: string }) {
-  if (!value?.trim()) return null;
-  return (
-    <div className="grid grid-cols-[5.5rem_1fr] gap-2">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="text-foreground/90 leading-relaxed break-words">{value}</dd>
-    </div>
   );
 }

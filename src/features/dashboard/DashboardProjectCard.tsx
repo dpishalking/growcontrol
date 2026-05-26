@@ -29,9 +29,9 @@ function statusLine(model: ProjectCardModel): {
 }
 
 export function DashboardProjectCard({ model, selected, onOpen }: Props) {
-  const { project, funnelCount, progressPercent } = model;
+  const { funnelCount, progressPercent, displayName } = model;
   const status = statusLine(model);
-  const gradId = `progress-${project.id}`;
+  const gradId = `progress-${model.project.id}`;
 
   return (
     <DashboardFrame
@@ -83,7 +83,7 @@ export function DashboardProjectCard({ model, selected, onOpen }: Props) {
 
         <div className="min-w-0 flex-1">
           <p className="truncate font-display text-base font-semibold text-foreground">
-            {project.projectName}
+            {displayName}
           </p>
           <p
             className={cn(

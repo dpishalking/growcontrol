@@ -1,5 +1,6 @@
 import type { MockStore } from "@/services/storage";
-import { getFunnelById } from "@/services/funnelService";
+import { resolveProjectDisplayName } from "@/lib/projectDisplayName";
+import { getFunnelById, getFunnelsByProject } from "@/services/funnelService";
 import { getMaterialsByFunnel } from "@/services/materialService";
 import { getMetricsByFunnel } from "@/services/funnelMetricService";
 import { getFunnelAuditSnapshot } from "@/services/funnelAuditService";
@@ -51,9 +52,10 @@ function projectContext(
   if (!projectId) return null;
   const project = getProjectById(store, projectId);
   if (!project) return null;
+  const funnels = getFunnelsByProject(store, projectId);
   return {
     projectId,
-    projectName: project.projectName,
+    projectName: resolveProjectDisplayName(project, funnels),
     funnelName: funnelLabel(funnelId, store),
   };
 }

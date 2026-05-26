@@ -5,8 +5,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { AdminProjectPlanPanel } from "@/components/admin/AdminProjectPlanPanel";
 import { supabase } from "@/integrations/supabase/client";
 import { profileIdentifier } from "@/lib/authLogin";
+import { buildProjectPlanOfAction } from "@/lib/admin/projectPlanOfAction";
 import { formatDate } from "@/utils/format";
 
 type ProjectRow = {
@@ -22,10 +24,33 @@ type ProjectRow = {
 
 type ProfileRow = { user_id: string; email: string | null; display_name: string | null };
 
+type HypothesisRow = {
+  id: string;
+  project_id: string;
+  app_id: string | null;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  expected_impact: string | null;
+  created_at: string;
+};
+
+type ExperimentRow = {
+  project_id: string;
+  hypothesis_id: string | null;
+  app_hyp_id: string | null;
+  owner: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  status: string;
+};
+
 export default function AdminProjectsPage() {
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [profiles, setProfiles] = useState<Record<string, ProfileRow>>({});
-  const [hypothesisCounts, setHypothesisCounts] = useState<Record<string, number>>({});
+  const [hypotheses, setHypotheses] = useState<HypothesisRow[]>([]);
+  const [experiments, setExperiments] = useState<ExperimentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -34,18 +59,26 @@ export default function AdminProjectsPage() {
     let cancel = false;
     (async () => {
       try {
-        const [pr, pf, hy] = await Promise.all([
+        const [pr, pf, hy, ex] = await Promise.all([
           supabase
             .from("projects")
             .select("id,user_id,name,description,status,created_at,last_activity_at,metadata")
             .order("last_activity_at", { ascending: false }),
           supabase.from("profiles").select("user_id,email,display_name"),
-          supabase.from("hypotheses").select("project_id"),
+          supabase
+            .from("hypotheses")
+            .select(
+              "id,project_id,app_id,title,description,status,priority,expected_impact,created_at",
+            ),
+          supabase
+            .from("experiments")
+            .select("project_id,hypothesis_id,app_hyp_id,owner,start_date,end_date,status"),
         ]);
         if (cancel) return;
         if (pr.error) throw pr.error;
         if (pf.error) throw pf.error;
         if (hy.error) throw hy.error;
+        if (ex.error) throw ex.error;
 
         setProjects((pr.data ?? []) as ProjectRow[]);
         const map: Record<string, ProfileRow> = {};
@@ -53,12 +86,8 @@ export default function AdminProjectsPage() {
           map[p.user_id] = p;
         });
         setProfiles(map);
-
-        const counts: Record<string, number> = {};
-        ((hy.data ?? []) as { project_id: string }[]).forEach((h) => {
-          counts[h.project_id] = (counts[h.project_id] ?? 0) + 1;
-        });
-        setHypothesisCounts(counts);
+        setHypotheses((hy.data ?? []) as HypothesisRow[]);
+        setExperiments((ex.data ?? []) as ExperimentRow[]);
       } catch (e) {
         if (!cancel) setError((e as Error).message);
       } finally {
@@ -105,63 +134,65 @@ export default function AdminProjectsPage() {
           ) : error ? (
             <div className="p-6 text-sm text-warning">Не удалось загрузить: {error}</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border/60 text-xs uppercase tracking-wider text-muted-foreground">
-                    <th className="text-left py-3 px-4 font-medium">Проект</th>
-                    <th className="text-left py-3 px-4 font-medium">Участник</th>
-                    <th className="text-left py-3 px-4 font-medium">Прогресс</th>
-                    <th className="text-left py-3 px-4 font-medium">Гипотез</th>
-                    <th className="text-left py-3 px-4 font-medium">Статус</th>
-                    <th className="text-right py-3 px-4 font-medium">Активность</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((p) => {
-                    const owner = profiles[p.user_id];
-                    const meta = (p.metadata ?? {}) as { completenessScore?: number; funnelCount?: number };
-                    return (
-                      <tr key={p.id} className="border-b border-border/30 last:border-0 hover:bg-secondary/30">
-                        <td className="py-2.5 px-4 font-medium max-w-[260px] truncate">{p.name}</td>
-                        <td className="py-2.5 px-4 max-w-[200px]">
+            <div className="divide-y divide-border/30">
+              {filtered.map((p) => {
+                const owner = profiles[p.user_id];
+                const meta = (p.metadata ?? {}) as {
+                  completenessScore?: number;
+                  funnelCount?: number;
+                  hypothesesTesting?: number;
+                  hypothesesQueued?: number;
+                  maxWizardStep?: number;
+                  wizardStepTitle?: string | null;
+                  mainGoal?: string;
+                  northStarMetric?: string;
+                };
+                const plan = buildProjectPlanOfAction(
+                  p.id,
+                  meta,
+                  p.description,
+                  hypotheses,
+                  experiments,
+                );
+
+                return (
+                  <div key={p.id} className="p-4 space-y-3 hover:bg-secondary/20 transition-colors">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-1">
+                        <div className="font-medium">{p.name}</div>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                           {owner ? (
                             <Button asChild variant="link" size="sm" className="h-auto p-0 text-foreground">
-                              <Link to={`/admin/users/${owner.user_id}`}>{profileIdentifier(owner)}</Link>
+                              <Link to={`/admin/users/${owner.user_id}`}>
+                                {profileIdentifier(owner)}
+                              </Link>
                             </Button>
                           ) : (
-                            <span className="text-muted-foreground">{p.user_id.slice(0, 8)}</span>
+                            <span>{p.user_id.slice(0, 8)}</span>
                           )}
-                        </td>
-                        <td className="py-2.5 px-4 text-xs text-muted-foreground">
-                          {meta.completenessScore ?? 0}% · {meta.funnelCount ?? 0} воронок
-                        </td>
-                        <td className="py-2.5 px-4 text-muted-foreground tabular-nums">
-                          {hypothesisCounts[p.id] ?? 0}
-                        </td>
-                        <td className="py-2.5 px-4">
-                          <Badge
-                            variant="outline"
-                            className={p.status === "active" ? "chip chip-success" : "chip"}
-                          >
-                            {p.status}
-                          </Badge>
-                        </td>
-                        <td className="py-2.5 px-4 text-right text-xs text-muted-foreground tabular-nums">
-                          {formatDate(p.last_activity_at)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
-                        Проектов не найдено
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
+                          <span>
+                            {meta.completenessScore ?? 0}% · {meta.funnelCount ?? 0} воронок
+                          </span>
+                          <span className="tabular-nums">{formatDate(p.last_activity_at)}</span>
+                        </div>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className={p.status === "active" ? "chip chip-success" : "chip"}
+                      >
+                        {p.status}
+                      </Badge>
+                    </div>
+
+                    <div className="rounded-xl border border-border/40 bg-card/20 p-3">
+                      <AdminProjectPlanPanel plan={plan} compact />
+                    </div>
+                  </div>
+                );
+              })}
+              {filtered.length === 0 ? (
+                <div className="py-8 text-center text-sm text-muted-foreground">Проектов не найдено</div>
+              ) : null}
             </div>
           )}
         </CardContent>
