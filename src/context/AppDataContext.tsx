@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -122,6 +123,7 @@ import type { FunnelStageDefinition, FunnelTypeId } from "@/types/funnelType";
 import { loadStore, saveStore, setStorageScope, type MockStore } from "@/services/storage";
 import { useAuth } from "@/hooks/useAuth";
 import { logProjectActivity, resolveProjectIdForFunnel, syncAllProjectsToRemote, syncExperimentToRemote, syncProjectToRemote } from "@/services/projectSyncService";
+import { mergeStores, pullRemoteStore, pushRemoteStore, storesEqual } from "@/services/storeSyncService";
 import { notifyAuditReady, notifyTestStarted } from "@/services/telegramService";
 import {
   isMaterialsChecklistComplete,
@@ -287,21 +289,64 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [store, setStore] = useState<MockStore>(() =>
     initStore({ userId: scopeUserId, email: scopeEmail, name: scopeName }),
   );
+  const pushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncGenerationRef = useRef(0);
+
+  const scheduleRemotePush = useCallback(
+    (next: MockStore) => {
+      if (!scopeUserId || guest) return;
+      if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
+      pushTimerRef.current = setTimeout(() => {
+        void pushRemoteStore(next);
+        void syncAllProjectsToRemote(next);
+      }, 2000);
+    },
+    [scopeUserId, guest],
+  );
 
   useEffect(() => {
     setStorageScope({ userId: scopeUserId });
-    const next = initStore({ userId: scopeUserId, email: scopeEmail, name: scopeName });
-    setStore(next);
-    if (scopeUserId && !guest && next.projects.length > 0) {
-      void syncAllProjectsToRemote(next);
-    }
+    const local = initStore({ userId: scopeUserId, email: scopeEmail, name: scopeName });
+    setStore(local);
+
+    if (!scopeUserId || guest) return;
+
+    const generation = ++syncGenerationRef.current;
+
+    void (async () => {
+      const remote = await pullRemoteStore();
+      if (generation !== syncGenerationRef.current) return;
+
+      const merged = remote
+        ? mergeStores(local, remote, { userId: scopeUserId, email: scopeEmail, name: scopeName })
+        : local;
+
+      if (!storesEqual(local, merged)) {
+        saveStore(merged);
+        setStore(merged);
+      }
+
+      void pushRemoteStore(merged);
+      void syncAllProjectsToRemote(merged);
+    })();
+
+    return () => {
+      if (pushTimerRef.current) {
+        clearTimeout(pushTimerRef.current);
+        pushTimerRef.current = null;
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeUserId, guest]);
 
-  const persist = useCallback((next: MockStore) => {
-    saveStore(next);
-    setStore({ ...next });
-  }, []);
+  const persist = useCallback(
+    (next: MockStore) => {
+      saveStore(next);
+      setStore({ ...next });
+      scheduleRemotePush(next);
+    },
+    [scheduleRemotePush],
+  );
 
   const syncProject = useCallback(
     (project: Project, currentStore: MockStore, event?: { type: string; title: string; description?: string }) => {

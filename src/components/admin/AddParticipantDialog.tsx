@@ -11,6 +11,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { createUserByAdmin, generateTempPassword } from "@/lib/admin/createUser";
 
@@ -98,9 +99,9 @@ export function AddParticipantDialog({ open, onOpenChange, onSuccess, trigger }:
           <div className="space-y-2">
             <Label htmlFor="participant-password">Пароль</Label>
             <div className="flex gap-2">
-              <Input
+              <PasswordInput
                 id="participant-password"
-                type="text"
+                className="min-w-0 flex-1"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="минимум 6 символов"

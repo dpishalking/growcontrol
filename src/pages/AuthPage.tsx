@@ -12,6 +12,7 @@ import {
 import { AppBrand } from "@/components/layout/AppBrand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { resolveAuthEmail, validateLogin } from "@/lib/authLogin";
 import { useAuth } from "@/hooks/useAuth";
@@ -222,8 +223,7 @@ export default function AuthPage() {
                 {mode !== "magic" && (
                   <div className="space-y-1.5">
                     <Label className="text-xs">Пароль</Label>
-                    <Input
-                      type="password"
+                    <PasswordInput
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Минимум 6 символов"

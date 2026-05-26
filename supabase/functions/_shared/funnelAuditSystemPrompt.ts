@@ -513,7 +513,7 @@ export const FUNNEL_AUDIT_SYSTEM_LITE = `Ты growth-аналитик. Быст�
 
 НУЖНО:
 1. Смотри метрики: red/yellow, gap план/факт, revenueImpact
-2. Свяжи просадку с этапом воронки (stageBlocks по КАЖДОМУ этапу из списка)
+2. Свяжи просадку с этапом воронки (stageBlocks по КАЖДОМУ этапу из списка в user message — stageBlock.stageId только из этого списка, без новых имён)
 3. 3 problems — только то, что бьёт по конверсии
 4. funnel.stages — где главная утечка (isMainLeak)
 5. 5 hypotheses — конкретные тесты, metricName = метрика из данных

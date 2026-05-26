@@ -89,8 +89,10 @@ export default function FunnelOverviewPage() {
     const wins = finished.filter((e) => e.decision === "scale").length;
     return Math.round((wins / finished.length) * 100);
   }, [experiments]);
-  const diag        = buildDiagnostics(metrics, template.bottleneckMetricNames);
-  const typeName    = funnel.funnelTypeId ? template.name : null;
+
+  const template = getFunnelTypeTemplate(funnel.funnelTypeId ?? undefined);
+  const diag = buildDiagnostics(metrics, template.bottleneckMetricNames);
+  const typeName = funnel.funnelTypeId ? template.name : null;
 
   const currentStepIndex = Math.max(1, Math.min(WIZARD_STEPS.length, funnel.currentWizardStep ?? 1));
   const nextStep    = wizardStepByIndex(currentStepIndex);

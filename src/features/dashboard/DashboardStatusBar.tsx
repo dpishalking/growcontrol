@@ -1,13 +1,19 @@
 import type { LucideIcon } from "lucide-react";
-import { ChevronRight, FlaskConical, Target } from "lucide-react";
+import { AlarmClock, ChevronRight, ClipboardList, FlaskConical, PlayCircle, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DashboardFrame } from "./DashboardFrame";
 
 type Props = {
   activeTests: number;
-  redMetrics: number;
   inWork: number;
+  inQueue: number;
+  urgentTests: number;
+  resumeCount: number;
+  redMetrics: number;
   onActiveTestsClick?: () => void;
+  onQueueClick?: () => void;
+  onUrgentClick?: () => void;
+  onResumeClick?: () => void;
   onRedMetricsClick?: () => void;
 };
 
@@ -24,9 +30,15 @@ type StatDef = {
 
 export function DashboardStatusBar({
   activeTests,
-  redMetrics,
   inWork,
+  inQueue,
+  urgentTests,
+  resumeCount,
+  redMetrics,
   onActiveTestsClick,
+  onQueueClick,
+  onUrgentClick,
+  onResumeClick,
   onRedMetricsClick,
 }: Props) {
   const stats: StatDef[] = [
@@ -39,6 +51,36 @@ export function DashboardStatusBar({
       valueClass: activeTests > 0 ? "text-success" : undefined,
       onClick: activeTests > 0 ? onActiveTestsClick : undefined,
       actionLabel: "К очереди",
+    },
+    {
+      icon: ClipboardList,
+      label: "В очереди",
+      value: inQueue,
+      hint: inQueue > 0 ? "ждут запуска" : "очередь пуста",
+      cellClass: inQueue > 0 ? "dashboard-stat-cell--focus" : undefined,
+      valueClass: inQueue > 0 ? "text-primary" : undefined,
+      onClick: inQueue > 0 ? onQueueClick : undefined,
+      actionLabel: "К плану",
+    },
+    {
+      icon: AlarmClock,
+      label: "Дедлайн / итог",
+      value: urgentTests,
+      hint: urgentTests > 0 ? "сегодня или просрочено" : "дедлайнов нет",
+      cellClass: urgentTests > 0 ? "dashboard-stat-cell--warning" : undefined,
+      valueClass: urgentTests > 0 ? "text-warning" : undefined,
+      onClick: urgentTests > 0 ? onUrgentClick : undefined,
+      actionLabel: "К тесту",
+    },
+    {
+      icon: PlayCircle,
+      label: "Продолжить мастер",
+      value: resumeCount,
+      hint: resumeCount > 0 ? "незавершённая настройка" : "всё настроено",
+      cellClass: resumeCount > 0 ? "dashboard-stat-cell--focus" : undefined,
+      valueClass: resumeCount > 0 ? "text-primary" : undefined,
+      onClick: resumeCount > 0 ? onResumeClick : undefined,
+      actionLabel: "Продолжить",
     },
     {
       icon: Target,

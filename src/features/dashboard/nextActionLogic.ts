@@ -133,3 +133,59 @@ export function findPrimaryTestHref(snapshot: DashboardSnapshot): string | null 
   if (!item) return null;
   return `/projects/${item.projectId}/funnels/${item.hypothesis.funnelId}/wizard/plan`;
 }
+
+export type DashboardSummaryStats = {
+  inQueue: number;
+  urgentTests: number;
+  resumeCount: number;
+  queueHref: string | null;
+  urgentHref: string | null;
+  resumeHref: string | null;
+};
+
+export function computeDashboardSummaryStats(
+  snapshot: DashboardSnapshot,
+  experimentByHypothesis: (id: string) => Experiment | null,
+): DashboardSummaryStats {
+  let urgentTests = 0;
+  let urgentHref: string | null = null;
+
+  for (const { hypothesis: h, projectId } of snapshot.activeTests) {
+    if (h.status !== "testing") continue;
+    const status = getPlanStatus(h, experimentByHypothesis(h.id));
+    if (status.label === "Итог!" || status.label === "Сегодня") {
+      urgentTests += 1;
+      urgentHref ??= `/projects/${projectId}/funnels/${h.funnelId}/wizard/plan`;
+    }
+  }
+
+  let resumeCount = 0;
+  let resumeHref: string | null = null;
+  for (const card of snapshot.projectCards) {
+    resumeCount += card.resumeCount;
+    if (!resumeHref) {
+      const funnel = card.funnels.find((f) => funnelNeedsResume(f));
+      if (funnel) resumeHref = funnelResumePath(card.project.id, funnel);
+    }
+  }
+
+  const queueItem = snapshot.activeTests.find((x) => x.hypothesis.status === "backlog");
+  const queueHref = queueItem
+    ? `/projects/${queueItem.projectId}/funnels/${queueItem.hypothesis.funnelId}/wizard/plan`
+    : null;
+
+  return {
+    inQueue: snapshot.inQueue,
+    urgentTests,
+    resumeCount,
+    queueHref,
+    urgentHref,
+    resumeHref,
+  };
+}
+
+export function findQueueHref(snapshot: DashboardSnapshot): string | null {
+  const item = snapshot.activeTests.find((x) => x.hypothesis.status === "backlog");
+  if (!item) return null;
+  return `/projects/${item.projectId}/funnels/${item.hypothesis.funnelId}/wizard/plan`;
+}

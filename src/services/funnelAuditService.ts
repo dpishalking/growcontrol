@@ -2,6 +2,7 @@ import type { Funnel } from "@/types/funnel";
 import type { Material } from "@/types/material";
 import type { FunnelAuditApiPayload } from "@/types/funnelAudit";
 import { getFunnelTypeTemplate } from "@/data/funnelTypes/catalog";
+import { getStagesForFunnel } from "@/utils/funnelStages";
 import { getMetricsByFunnel } from "./funnelMetricService";
 import { getFunnelById, updateFunnel } from "./funnelService";
 import type { MockStore } from "./storage";
@@ -13,14 +14,17 @@ export function buildFunnelAuditPayload(store: MockStore, funnelId: string): Fun
   if (!funnel) return null;
 
   const materials = getMaterialsByFunnel(store, funnelId);
-  const stageOrder = funnel.stages.map((s) => s.id);
+  /** Тот же список, что карта аудита и шаг AuditStep — без рассинхрона с edge. */
+  const resolvedStages = getStagesForFunnel(funnel);
+  const stageOrder = resolvedStages.map((s) => s.id);
   const metrics = getMetricsByFunnel(store, funnelId, stageOrder);
   const typeId = funnel.funnelTypeId ?? "service_lead";
   const typeTemplate = getFunnelTypeTemplate(typeId);
-  const stages =
-    funnel.stages.length > 0
-      ? funnel.stages.map((s) => ({ id: s.id, label: s.label, description: s.description }))
-      : typeTemplate.stages.map((s) => ({ id: s.id, label: s.label, description: s.description }));
+  const stages = resolvedStages.map((s) => ({
+    id: s.id,
+    label: s.label,
+    description: s.description,
+  }));
 
   return {
     landingUrl: funnel.landingUrl || undefined,

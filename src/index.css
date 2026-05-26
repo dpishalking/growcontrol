@@ -294,6 +294,16 @@
     border-color: hsl(var(--success) / 0.35);
   }
 
+  .dashboard-stat-cell--warning {
+    background: hsl(var(--warning) / 0.08);
+    border-color: hsl(var(--warning) / 0.35);
+  }
+
+  .dashboard-stat-cell--focus {
+    background: hsl(var(--primary) / 0.08);
+    border-color: hsl(var(--primary) / 0.35);
+  }
+
   .dashboard-cta-shimmer {
     position: relative;
     overflow: hidden;

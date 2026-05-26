@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { BarChart3, FolderKanban, FlaskConical, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,11 @@ import { NewProjectDialog } from "@/features/dashboard/NewProjectDialog";
 import { ActiveTestCard } from "@/features/dashboard/ActiveTestCard";
 import { DashboardFrame } from "@/features/dashboard/DashboardFrame";
 import { DashboardHero } from "@/features/dashboard/DashboardHero";
-import { findPrimaryTestHref, findRedMetricsHref } from "@/features/dashboard/nextActionLogic";
+import {
+  computeDashboardSummaryStats,
+  findPrimaryTestHref,
+  findRedMetricsHref,
+} from "@/features/dashboard/nextActionLogic";
 import { DashboardProjectCard } from "@/features/dashboard/DashboardProjectCard";
 import { DashboardStatusBar } from "@/features/dashboard/DashboardStatusBar";
 import { DashboardZone } from "@/features/dashboard/DashboardZone";
@@ -53,6 +57,11 @@ export default function DashboardPage() {
 
   const snapshot = useDashboardSnapshot(projects, projectFunnels, funnelHypotheses, funnelMetricsList);
 
+  const summaryStats = useMemo(
+    () => computeDashboardSummaryStats(snapshot, experimentByHypothesis),
+    [snapshot, experimentByHypothesis],
+  );
+
   const visibleTests = snapshot.activeTests.slice(0, 5);
   const hasProjects = snapshot.totals.projects > 0;
 
@@ -72,15 +81,36 @@ export default function DashboardPage() {
   };
 
   const showSummary =
-    hasProjects && (snapshot.activeTests.length > 0 || snapshot.totals.redMetrics > 0);
+    hasProjects &&
+    (snapshot.activeTests.length > 0 ||
+      snapshot.totals.redMetrics > 0 ||
+      summaryStats.resumeCount > 0);
 
-  const handleSummaryTestsClick = () => {
+  const scrollToTestQueue = () => {
     if (visibleTests.length > 0 && testQueueRef.current) {
       testQueueRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
+      return true;
     }
+    return false;
+  };
+
+  const handleSummaryTestsClick = () => {
+    if (scrollToTestQueue()) return;
     const href = findPrimaryTestHref(snapshot);
     if (href) nav(href);
+  };
+
+  const handleSummaryQueueClick = () => {
+    if (scrollToTestQueue()) return;
+    if (summaryStats.queueHref) nav(summaryStats.queueHref);
+  };
+
+  const handleSummaryUrgentClick = () => {
+    if (summaryStats.urgentHref) nav(summaryStats.urgentHref);
+  };
+
+  const handleSummaryResumeClick = () => {
+    if (summaryStats.resumeHref) nav(summaryStats.resumeHref);
   };
 
   const handleSummaryRedMetricsClick = () => {
@@ -144,9 +174,15 @@ export default function DashboardPage() {
         >
           <DashboardStatusBar
             activeTests={snapshot.activeTests.length}
-            redMetrics={snapshot.totals.redMetrics}
             inWork={snapshot.inWork}
+            inQueue={summaryStats.inQueue}
+            urgentTests={summaryStats.urgentTests}
+            resumeCount={summaryStats.resumeCount}
+            redMetrics={snapshot.totals.redMetrics}
             onActiveTestsClick={handleSummaryTestsClick}
+            onQueueClick={handleSummaryQueueClick}
+            onUrgentClick={handleSummaryUrgentClick}
+            onResumeClick={handleSummaryResumeClick}
             onRedMetricsClick={handleSummaryRedMetricsClick}
           />
         </DashboardZone>

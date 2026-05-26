@@ -72,7 +72,11 @@ export default function App() {
                   />
                   <Route
                     path="/projects/:projectId/funnels/:funnelId"
-                    element={<FunnelOverviewPage />}
+                    element={
+                      <ErrorBoundary fallbackTitle="Не удалось открыть воронку">
+                        <FunnelOverviewPage />
+                      </ErrorBoundary>
+                    }
                   />
                   <Route
                     path="/billing"

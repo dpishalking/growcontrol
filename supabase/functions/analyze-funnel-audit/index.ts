@@ -240,6 +240,24 @@ serve(async (req) => {
       });
     }
 
+    const funnelRaw = funnel as Record<string, unknown>;
+    const stagesRaw = funnelRaw.stages;
+    const usableStageRows = Array.isArray(stagesRaw)
+      ? stagesRaw.filter((s) => {
+          if (!s || typeof s !== "object") return false;
+          const id = (s as Record<string, unknown>).id;
+          return typeof id === "string" && id.trim().length > 0;
+        })
+      : [];
+    if (usableStageRows.length === 0) {
+      return new Response(JSON.stringify({
+        error: "Не переданы этапы воронки. Обновите приложение или снова пройдите шаг «Тип воронки».",
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const mats = Array.isArray(materials) ? materials : [];
     const mets = Array.isArray(metrics) ? metrics : [];
     if (mets.length === 0) {
@@ -289,6 +307,7 @@ serve(async (req) => {
     const userText = [
       "Быстрый скрининг воронки по метрикам. Не делай site-audit.",
       funnelCtx,
+      "\nПРАВИЛО ЭТАПОВ: в stageBlocks каждый stageId = ровно один id из списка «ЭТАПЫ» выше; не придумывай новые id. Ровно один stageBlock на каждый этап из списка (порядок как в списке).",
       "\nМЕТРИКИ (сначала red/yellow):\n",
       metricsBlock,
       "\nМАТЕРИАЛЫ (кратко):\n",
