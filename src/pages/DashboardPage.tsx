@@ -71,7 +71,7 @@ export default function DashboardPage() {
     if (!p) return;
     setNewOpen(false);
     setNewName("");
-    nav(`/projects/${p.id}/funnels/new/wizard/focus`);
+    nav(`/projects/${p.id}/funnels/new/wizard/funnel-type`);
   };
 
   const openProject = (projectId: string) => {

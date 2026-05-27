@@ -1,5 +1,6 @@
 import type { FunnelTypeId } from "@/types/funnelType";
 import type { Material, MaterialType } from "@/types/material";
+import { materialHasAnyValidUrl } from "@/utils/materialUrls";
 import { MATERIAL_TYPES } from "@/types/material";
 import { webinarMaterialStep } from "@/data/funnelTypes/webinarMaterialFlow";
 import type { CreateFindingInput } from "@/services/auditService";
@@ -149,7 +150,7 @@ export function analyzeMaterial(m: Material, funnelId: string): CreateFindingInp
   });
 
   const hasFile = !!m.attachment;
-  const hasUrl = !!m.url.trim();
+  const hasUrl = materialHasAnyValidUrl(m.url);
   const text = normalize(`${m.content} ${m.attachment?.extractedText ?? ""}`);
 
   if (!hasFile && !hasUrl && text.length < 20) {

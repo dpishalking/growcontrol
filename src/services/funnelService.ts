@@ -53,6 +53,20 @@ export function createFunnel(store: MockStore, input: CreateFunnelFocusInput): F
   return funnel;
 }
 
+export function createFunnelDraft(store: MockStore, projectId: string): Funnel {
+  return createFunnel(store, {
+    projectId,
+    productName: "",
+    productDescription: "",
+    averagePrice: "",
+    trafficSource: "",
+    landingUrl: "",
+    targetAudience: "",
+    funnelGoal: "",
+    currentProblem: "",
+  });
+}
+
 export function updateFunnel(store: MockStore, funnelId: string, patch: Partial<Funnel>): Funnel | null {
   const idx = store.funnels.findIndex((f) => f.id === funnelId);
   if (idx < 0) return null;

@@ -42,7 +42,7 @@ export function ProjectFunnelsPanel({ project, onClose }: Props) {
         </div>
         <div className="flex shrink-0 gap-1.5">
           <Button asChild size="sm" className="h-8 bg-gradient-money text-primary-foreground">
-            <Link to={`/projects/${projectId}/funnels/new/wizard/focus`}>
+            <Link to={`/projects/${projectId}/funnels/new/wizard/funnel-type`}>
               <Plus className="mr-1 h-3.5 w-3.5" />
               Воронка
             </Link>
@@ -67,7 +67,7 @@ export function ProjectFunnelsPanel({ project, onClose }: Props) {
             <span className="text-sm font-medium text-foreground">Незавершённый мастер</span>
             {focusDraft && !draftFunnels.some((f) => f.status === "draft") ? (
               <Button asChild size="sm" className="ml-auto h-7 bg-gradient-money text-primary-foreground">
-                <Link to={`/projects/${projectId}/funnels/new/wizard/focus`}>Продолжить</Link>
+                <Link to={`/projects/${projectId}/funnels/new/wizard/funnel-type`}>Продолжить</Link>
               </Button>
             ) : null}
             {draftFunnels.slice(0, 2).map((f) => (
@@ -84,7 +84,7 @@ export function ProjectFunnelsPanel({ project, onClose }: Props) {
       {funnels.length === 0 ? (
         <div className="px-4 py-12 text-center sm:px-5">
           <Button asChild className="bg-gradient-money text-primary-foreground">
-            <Link to={`/projects/${projectId}/funnels/new/wizard/focus`}>Создать первую воронку</Link>
+            <Link to={`/projects/${projectId}/funnels/new/wizard/funnel-type`}>Создать первую воронку</Link>
           </Button>
         </div>
       ) : (

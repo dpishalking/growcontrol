@@ -1,4 +1,5 @@
 import type { CreateMaterialInput, Material } from "@/types/material";
+import { joinMaterialUrlList, parseMaterialUrlList } from "@/utils/materialUrls";
 import { MATERIAL_TYPE_AFFECTED_METRICS } from "@/types/material";
 import { createId, nowIso } from "@/utils/id";
 import type { MockStore } from "./storage";
@@ -20,7 +21,7 @@ export function createMaterial(store: MockStore, input: CreateMaterialInput): Ma
     type: input.type,
     title: input.title.trim(),
     source: input.source?.trim() ?? "",
-    url: input.url?.trim() ?? "",
+    url: joinMaterialUrlList(parseMaterialUrlList(input.url ?? "")),
     content: input.content?.trim() ?? "",
     funnelStage: input.funnelStage,
     summary: input.summary?.trim() ?? "",

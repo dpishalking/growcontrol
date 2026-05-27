@@ -1,9 +1,12 @@
 import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import { EntityPathTitle } from "@/components/layout/EntityPathTitle";
+import type { EntityPathSegment } from "@/lib/funnelEntityPath";
 import { cn } from "@/lib/utils";
 
 type Props = {
   title: string;
+  pathSegments?: EntityPathSegment[];
   subtitle?: string;
   backTo?: string;
   backLabel?: string;
@@ -15,6 +18,7 @@ type Props = {
 
 export function PageHeader({
   title,
+  pathSegments,
   subtitle,
   backTo,
   backLabel = "Назад",
@@ -35,14 +39,18 @@ export function PageHeader({
       ) : null}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h1
-            className={cn(
-              "font-display font-bold tracking-tight truncate",
-              compact ? "text-xl sm:text-2xl" : "text-2xl sm:text-3xl",
-            )}
-          >
-            {title}
-          </h1>
+          {pathSegments?.length ? (
+            <EntityPathTitle segments={pathSegments} compact={compact} />
+          ) : (
+            <h1
+              className={cn(
+                "font-display font-bold tracking-tight truncate",
+                compact ? "text-xl sm:text-2xl" : "text-2xl sm:text-3xl",
+              )}
+            >
+              {title}
+            </h1>
+          )}
           {subtitle ? (
             <p className={cn("text-muted-foreground max-w-2xl", compact ? "mt-0.5 text-xs" : "mt-1 text-sm")}>
               {subtitle}

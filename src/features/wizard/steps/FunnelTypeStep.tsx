@@ -53,16 +53,16 @@ const QUIZ_Q3 = [
   { value: "renewal", label: "Повторное продление" },
 ];
 
-export function FunnelTypeStep({ funnel }: { funnel: Funnel }) {
+export function FunnelTypeStep({ funnel }: { funnel: Funnel | null }) {
   const { projectId } = useParams<{ projectId: string }>();
   const nav = useNavigate();
-  const { applyFunnelTypeAction, setFunnelStep } = useAppData();
+  const { applyFunnelTypeAction, createFunnelDraft, setFunnelStep } = useAppData();
 
-  const [selected, setSelected] = useState<FunnelTypeId | null>(funnel.funnelTypeId);
+  const [selected, setSelected] = useState<FunnelTypeId | null>(funnel?.funnelTypeId ?? null);
   const [showQuiz, setShowQuiz] = useState(false);
   const [quiz, setQuiz] = useState({ firstAction: "", salePoint: "", moneyEvent: "" });
   const [customStages, setCustomStages] = useState<FunnelStageDefinition[]>(
-    funnel.funnelTypeId === "custom" && funnel.stages.length
+    funnel?.funnelTypeId === "custom" && funnel.stages.length
       ? funnel.stages
       : getFunnelTypeTemplate("custom").requiredStages,
   );
@@ -80,6 +80,10 @@ export function FunnelTypeStep({ funnel }: { funnel: Funnel }) {
   };
 
   const handleNext = () => {
+    if (!projectId) {
+      toast.error("Нет проекта");
+      return;
+    }
     if (!selected) {
       toast.error("Выберите тип воронки");
       return;
@@ -87,6 +91,11 @@ export function FunnelTypeStep({ funnel }: { funnel: Funnel }) {
     if (selected === "custom" && customStages.filter((s) => s.label.trim()).length < 3) {
       toast.error("Добавьте минимум 3 этапа для кастомной воронки");
       return;
+    }
+
+    let targetFunnel = funnel;
+    if (!targetFunnel) {
+      targetFunnel = createFunnelDraft(projectId);
     }
 
     const stages =
@@ -99,9 +108,12 @@ export function FunnelTypeStep({ funnel }: { funnel: Funnel }) {
             }))
         : undefined;
 
-    applyFunnelTypeAction(funnel.id, selected, stages);
-    setFunnelStep(funnel.id, 3);
-    nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/materials`);
+    applyFunnelTypeAction(targetFunnel.id, selected, stages);
+    setFunnelStep(targetFunnel.id, 2);
+    toast.success("Тип выбран — ответьте на вопросы по фокусу");
+    nav(`/projects/${projectId}/funnels/${targetFunnel.id}/wizard/focus`, {
+      replace: !funnel,
+    });
   };
 
   const updateCustomStage = (index: number, label: string) => {
@@ -129,9 +141,9 @@ export function FunnelTypeStep({ funnel }: { funnel: Funnel }) {
     <WizardLayout
       funnel={funnel}
       activeStep="funnel-type"
-      onBack={() => nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/focus`)}
+      onBack={() => nav(`/projects/${projectId}`)}
       onNext={handleNext}
-      nextLabel="К материалам"
+      nextLabel="К фокусу воронки"
       nextDisabled={!selected}
     >
       <div className="space-y-6">
@@ -139,8 +151,7 @@ export function FunnelTypeStep({ funnel }: { funnel: Funnel }) {
           <h2 className="font-display text-xl font-semibold tracking-tight">Тип воронки</h2>
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
             <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
-              Шаблон задаёт этапы, метрики и материалы для аудита. Выберите карточку — структура
-              подставится автоматически.
+              Сначала шаблон — потом квиз задаст только релевантные вопросы про продукт, канал и цель.
             </p>
             <Button variant="outline" size="sm" onClick={() => setShowQuiz((v) => !v)} className="shrink-0">
               <HelpCircle className="mr-1 h-4 w-4" />

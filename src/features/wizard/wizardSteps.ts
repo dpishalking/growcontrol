@@ -16,8 +16,8 @@ export const WIZARD_STEPS: {
   title: string;
   subtitle: string;
 }[] = [
-  { id: "focus", index: 1, title: "Фокус воронки", subtitle: "Один продукт, один канал, одна посадочная, одна цель" },
-  { id: "funnel-type", index: 2, title: "Тип воронки", subtitle: "Шаблон этапов, метрик и материалов" },
+  { id: "funnel-type", index: 1, title: "Тип воронки", subtitle: "Шаблон этапов, метрик и материалов — сузит вопросы дальше" },
+  { id: "focus", index: 2, title: "Фокус воронки", subtitle: "Продукт, канал и цель — только под выбранный тип" },
   { id: "materials", index: 3, title: "Материалы", subtitle: "Сайт, креативы, скрипты, аналитика" },
   { id: "metrics", index: 4, title: "Метрики воронки", subtitle: "План / факт по этапам — основа для аудита и гипотез" },
   { id: "audit", index: 5, title: "Аудит", subtitle: "AI-разбор материалов и связки этапов воронки" },
@@ -25,11 +25,11 @@ export const WIZARD_STEPS: {
   { id: "plan", index: 7, title: "План тестов", subtitle: "Приоритет ICE и запуск экспериментов" },
 ];
 
-/** Старый мастер: signals влит в hypotheses (7 шагов вместо 8). */
+/** Старый порядок: focus(1) → type(2). Новый: type(1) → focus(2). */
 export function migrateWizardStepIndex(stored: number): number {
-  if (stored <= 6) return stored;
-  if (stored === 7) return 6;
-  return 7;
+  if (stored >= 3) return stored;
+  if (stored === 2) return 1;
+  return 1;
 }
 
 export function wizardStepByIndex(index: number): typeof WIZARD_STEPS[number] {

@@ -17,12 +17,13 @@ import { getFunnelTypeTemplate } from "@/data/funnelTypes/catalog";
 import type { Funnel } from "@/types/funnel";
 import { getStagesForFunnel } from "@/utils/funnelStages";
 import { formatFileSize, processFile } from "@/utils/fileAttachment";
+import { isValidHttpUrl, joinMaterialUrlList } from "@/utils/materialUrls";
 
 const EMPTY_DRAFT: MaterialDraft = {
   type: "site",
   funnelStage: "landing",
   title: "",
-  url: "",
+  urls: [""],
   attachment: null,
 };
 
@@ -67,7 +68,7 @@ export function MaterialsStep({ funnel }: { funnel: Funnel }) {
       type: item.suggestedType ?? "content",
       funnelStage: item.stageId,
       title: item.label,
-      url: "",
+      urls: [""],
       attachment: null,
     });
     addFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -109,8 +110,10 @@ export function MaterialsStep({ funnel }: { funnel: Funnel }) {
       toast.error("Укажите название материала");
       return;
     }
-    if (!draft.url.trim() && !draft.attachment) {
-      toast.error("Добавьте ссылку или файл");
+    const urlBlob = joinMaterialUrlList(draft.urls ?? []);
+    const hasValidUrls = (draft.urls ?? []).some((u) => isValidHttpUrl(u));
+    if (!hasValidUrls && !draft.attachment) {
+      toast.error("Добавьте хотя бы одну корректную ссылку или файл");
       return;
     }
     const addedLabel = activeChecklistLabel;
@@ -119,7 +122,7 @@ export function MaterialsStep({ funnel }: { funnel: Funnel }) {
       type: draft.type,
       funnelStage: draft.funnelStage,
       title: draft.title,
-      url: draft.url,
+      url: urlBlob,
       content: draft.attachment?.extractedText ?? "",
       attachment: draft.attachment,
     });
@@ -134,7 +137,7 @@ export function MaterialsStep({ funnel }: { funnel: Funnel }) {
           type: draft.type,
           funnelStage: draft.funnelStage,
           title: draft.title,
-          url: draft.url,
+          url: urlBlob,
           content: draft.attachment?.extractedText ?? "",
           attachment: draft.attachment,
           source: "",
@@ -170,7 +173,7 @@ export function MaterialsStep({ funnel }: { funnel: Funnel }) {
     <WizardLayout
       funnel={funnel}
       activeStep="materials"
-      onBack={() => nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/funnel-type`)}
+      onBack={() => nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/focus`)}
       onNext={handleNext}
       nextLabel={materials.length === 0 ? "Пропустить (метрики всё равно нужны)" : "К метрикам"}
     >
@@ -229,16 +232,30 @@ export function MaterialsStep({ funnel }: { funnel: Funnel }) {
                           {MATERIAL_TYPES.find((t) => t.id === m.type)?.label ?? m.type}
                         </Badge>
                       </div>
-                      {m.url ? (
-                        <a
-                          href={m.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[11px] text-primary hover:underline block mt-0.5 truncate max-w-full"
-                        >
-                          {m.url}
-                        </a>
-                      ) : null}
+                      {(() => {
+                        const lines = m.url.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+                        if (lines.length === 0) return null;
+                        return (
+                          <ul className="mt-1 space-y-1">
+                            {lines.map((href, i) => (
+                              <li key={`${href}-${i}`}>
+                                <a
+                                  href={href}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-[11px] text-primary hover:underline block truncate max-w-full"
+                                  title={href}
+                                >
+                                  <span className="text-muted-foreground font-medium tabular-nums mr-1">
+                                    {lines.length > 1 ? `${i + 1}. ` : ""}
+                                  </span>
+                                  {href}
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        );
+                      })()}
                       {m.attachment ? (
                         <p className="text-[11px] text-muted-foreground mt-0.5">
                           {m.attachment.fileName} · {formatFileSize(m.attachment.fileSize)}

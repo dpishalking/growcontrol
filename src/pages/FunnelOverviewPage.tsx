@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronRight,
   GitBranch,
+  Sparkles,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,13 +24,17 @@ import {
 } from "@/components/ui/collapsible";
 import { DashboardFrame } from "@/features/dashboard/DashboardFrame";
 import { DashboardZone } from "@/features/dashboard/DashboardZone";
+import { EntityPathTitle } from "@/components/layout/EntityPathTitle";
 import { useAppData } from "@/context/AppDataContext";
 import { renderRouteGuard, useProjectFunnelGuard } from "@/hooks/useRouteEntityGuard";
+import { buildFunnelEntityPath } from "@/lib/funnelEntityPath";
 import { getFunnelTypeTemplate } from "@/data/funnelTypes/catalog";
+import { FUNNEL_TYPE_VISUALS, getFunnelTypeVisual } from "@/data/funnelTypes/visuals";
+import { getStageIcon } from "@/features/audit/stageVisuals";
 import { buildDiagnostics } from "@/utils/funnelDiagnostics";
 import { sortByPriority, BUCKET_LABELS } from "@/utils/icePriority";
 import { WIZARD_STEPS, wizardStepByIndex } from "@/features/wizard/wizardSteps";
-import { getStageLabelForFunnel } from "@/utils/funnelStages";
+import { getStagesForFunnel, getStageLabelForFunnel } from "@/utils/funnelStages";
 import { cn } from "@/lib/utils";
 import type { Experiment, ExperimentDecision } from "@/types/experiment";
 import type { Funnel } from "@/types/funnel";
@@ -84,6 +89,7 @@ function FunnelOverviewContent({
     funnelMetricsList,
     funnelHypotheses,
     funnelExperiments,
+    projectFunnels,
   } = useAppData();
 
   const materials   = funnelMaterials(funnel.id);
@@ -112,7 +118,8 @@ function FunnelOverviewContent({
 
   const template = getFunnelTypeTemplate(funnel.funnelTypeId ?? undefined);
   const diag = buildDiagnostics(metrics, template.bottleneckMetricNames);
-  const typeName = funnel.funnelTypeId ? template.name : null;
+  const typeVisual = funnel.funnelTypeId ? getFunnelTypeVisual(funnel.funnelTypeId) : FUNNEL_TYPE_VISUALS.custom;
+  const stageChain = useMemo(() => getStagesForFunnel(funnel), [funnel]);
 
   const currentStepIndex = Math.max(1, Math.min(WIZARD_STEPS.length, funnel.currentWizardStep ?? 1));
   const nextStep    = wizardStepByIndex(currentStepIndex);
@@ -120,81 +127,152 @@ function FunnelOverviewContent({
 
   const top3 = sortByPriority(hypotheses).slice(0, 3);
   const wizardPath = `/projects/${projectId}/funnels/${funnel.id}/wizard/${nextStep.id}`;
+  const TypeIcon = typeVisual.icon;
+  const pathSegments = buildFunnelEntityPath(project, funnel, projectId, projectFunnels(project.id));
 
   return (
     <div className="dashboard-cockpit relative mx-auto max-w-4xl space-y-6 pb-8 sm:space-y-8">
-      <DashboardFrame variant="accent" innerClassName="px-5 py-5 sm:px-6 sm:py-6">
+      <DashboardFrame
+        variant="accent"
+        innerClassName="relative overflow-hidden px-5 py-5 sm:px-6 sm:py-6"
+      >
+        <div
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute inset-x-0 top-0 h-[min(52%,260px)] bg-gradient-to-br opacity-[0.65] sm:h-44",
+            typeVisual.gradient,
+          )}
+        />
+
         <Link
           to="/dashboard"
-          className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          className="relative z-10 mb-5 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           На главную
         </Link>
 
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              {typeName ? (
-                <span className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-primary">
-                  {typeName}
-                </span>
-              ) : null}
-              <span className="text-xs text-muted-foreground">{project.name}</span>
-            </div>
-            <h1 className="font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              {funnel.productName || "Воронка"}
-            </h1>
-            <p className="max-w-2xl text-sm text-muted-foreground">
-              {[funnel.trafficSource, funnel.landingUrl].filter(Boolean).join(" → ")}
-              {funnel.funnelGoal ? ` · Цель: ${funnel.funnelGoal}` : ""}
-            </p>
-          </div>
-
-          <Button
-            asChild
-            size="lg"
-            className="dashboard-cta-shimmer shrink-0 bg-gradient-money text-primary-foreground shadow-glow"
-          >
-            <Link to={wizardPath} className="flex items-center gap-2">
-              Продолжить мастер
-              <span className="font-normal opacity-90">· {nextStep.title}</span>
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </Button>
-        </div>
-
-        <div className="mt-5 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-              Прогресс мастера
-            </span>
-            <span className="text-[11px] font-medium text-primary">
-              {currentStepIndex - 1} / {WIZARD_STEPS.length} шагов
-            </span>
-          </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-muted/80">
+        <div className="relative z-[1] flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:gap-6">
             <div
-              className="h-full rounded-full bg-gradient-money transition-all duration-500"
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
-          <div className="hidden gap-1 sm:flex">
-            {WIZARD_STEPS.map((step) => (
-              <Link
-                key={step.id}
-                to={`/projects/${projectId}/funnels/${funnel.id}/wizard/${step.id}`}
-                title={step.title}
-                className={cn(
-                  "h-1 flex-1 rounded-full transition-all duration-300",
-                  step.index < currentStepIndex
-                    ? "bg-primary"
-                    : step.index === currentStepIndex
-                      ? "bg-primary/50"
-                      : "bg-border/40",
-                )}
+              className={cn(
+                "relative flex h-16 w-16 shrink-0 items-center justify-center self-start rounded-2xl border border-white/10 bg-background/60 shadow-sm backdrop-blur-md sm:h-[4.75rem] sm:w-[4.75rem]",
+                "ring-1 ring-primary/25",
+              )}
+            >
+              <TypeIcon
+                className={cn("h-8 w-8 sm:h-9 sm:w-9", typeVisual.iconClass)}
+                strokeWidth={1.75}
               />
-            ))}
+            </div>
+
+            <div className="min-w-0 flex-1 space-y-4">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-primary">
+                  <Sparkles className="h-3 w-3 shrink-0" />
+                  Обзор воронки
+                </span>
+                <span className="text-xs capitalize text-muted-foreground">{overviewDateLabel()}</span>
+              </div>
+
+              <div className="space-y-3">
+                <EntityPathTitle segments={pathSegments} />
+                <p className="max-w-2xl text-sm text-muted-foreground">
+                  {[funnel.trafficSource, funnel.landingUrl].filter(Boolean).join(" → ")}
+                  {funnel.funnelGoal ? ` · Цель: ${funnel.funnelGoal}` : ""}
+                </p>
+              </div>
+
+              {stageChain.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Карта этапов
+                  </p>
+                  <div className="flex max-w-full gap-1 overflow-x-auto pb-0.5 [scrollbar-width:thin] sm:flex-wrap sm:overflow-visible">
+                    {stageChain.map((stage, idx) => {
+                      const StageIcon = getStageIcon(stage.id);
+                      return (
+                        <div key={stage.id} className="flex shrink-0 items-center gap-1">
+                          {idx > 0 ? (
+                            <ChevronRight
+                              className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40"
+                              aria-hidden
+                            />
+                          ) : null}
+                          <span
+                            className="inline-flex max-w-[11rem] items-center gap-2 rounded-xl border border-border/45 bg-background/55 px-2.5 py-2 backdrop-blur-sm sm:max-w-none"
+                            title={stage.description}
+                          >
+                            <StageIcon
+                              className="h-4 w-4 shrink-0 text-primary/85"
+                              strokeWidth={2}
+                              aria-hidden
+                            />
+                            <span className="truncate text-[11px] font-medium leading-snug text-foreground sm:text-xs">
+                              {stage.label}
+                            </span>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="flex w-full shrink-0 flex-col items-stretch gap-4 sm:flex-row sm:items-center lg:w-auto lg:flex-col lg:items-end">
+            <Button
+              asChild
+              size="lg"
+              className="dashboard-cta-shimmer w-full bg-gradient-money text-primary-foreground shadow-glow sm:w-auto"
+            >
+              <Link to={wizardPath} className="flex items-center justify-center gap-2">
+                Продолжить мастер
+                <span className="font-normal opacity-90">· {nextStep.title}</span>
+                <ArrowRight className="h-4 w-4 shrink-0" />
+              </Link>
+            </Button>
+
+            <div className="flex items-center gap-4 self-stretch rounded-2xl border border-border/50 bg-muted/15 px-4 py-3 sm:self-center lg:self-stretch lg:self-end">
+              <WizardProgressDial
+                funnelId={funnel.id}
+                progressPct={progressPct}
+                displayDone={Math.max(0, currentStepIndex - 1)}
+                totalSteps={WIZARD_STEPS.length}
+              />
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Прогресс мастера
+                  </span>
+                  <span className="text-[11px] font-medium tabular-nums text-primary">
+                    {currentStepIndex - 1} / {WIZARD_STEPS.length} шагов
+                  </span>
+                </div>
+                <div className="hidden gap-1 sm:flex">
+                  {WIZARD_STEPS.map((step) => (
+                    <Link
+                      key={step.id}
+                      title={step.title}
+                      to={`/projects/${projectId}/funnels/${funnel.id}/wizard/${step.id}`}
+                      className={cn(
+                        "h-1 flex-1 rounded-full transition-all duration-300",
+                        step.index < currentStepIndex
+                          ? "bg-primary"
+                          : step.index === currentStepIndex
+                            ? "bg-primary/50 ring-1 ring-primary/35"
+                            : "bg-border/40",
+                      )}
+                    />
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Текущий шаг:{" "}
+                  <span className="font-medium text-foreground">{nextStep.title}</span>
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </DashboardFrame>
@@ -399,6 +477,71 @@ function FunnelOverviewContent({
 }
 
 /* ── Sub-components ──────────────────────────────────────────── */
+
+function overviewDateLabel(): string {
+  return new Date().toLocaleDateString("ru-RU", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+}
+
+function WizardProgressDial({
+  funnelId,
+  progressPct,
+  displayDone,
+  totalSteps,
+}: {
+  funnelId: string;
+  progressPct: number;
+  displayDone: number;
+  totalSteps: number;
+}) {
+  const safePct = Number.isFinite(progressPct) ? Math.min(100, Math.max(0, progressPct)) : 0;
+  const dash = `${Math.max(safePct, displayDone === 0 ? 0 : 4)} 100`;
+  const gradId = `f-overview-w-${funnelId}`;
+  const labelId = `${gradId}-label`;
+
+  return (
+    <div className="relative flex h-[3.65rem] w-[3.65rem] shrink-0 items-center justify-center" aria-labelledby={labelId}>
+      <svg className="h-[3.65rem] w-[3.65rem] -rotate-90" viewBox="0 0 40 40" aria-hidden>
+        <circle
+          cx="20"
+          cy="20"
+          r="15.5"
+          fill="none"
+          strokeWidth="3"
+          className="text-muted/50"
+          stroke="currentColor"
+        />
+        <circle
+          cx="20"
+          cy="20"
+          r="15.5"
+          fill="none"
+          strokeWidth="3"
+          strokeLinecap="round"
+          stroke={`url(#${gradId})`}
+          strokeDasharray={dash}
+          pathLength={100}
+          className="transition-[stroke-dasharray] duration-700 ease-out"
+        />
+        <defs>
+          <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="hsl(var(--primary))" />
+            <stop offset="100%" stopColor="hsl(var(--accent))" />
+          </linearGradient>
+        </defs>
+      </svg>
+      <span id={labelId} className="absolute flex flex-col items-center leading-none tabular-nums">
+        <span className="text-[13px] font-bold text-foreground">{displayDone}</span>
+        <span className="text-[8px] font-medium uppercase tracking-wider text-muted-foreground">
+          из {totalSteps}
+        </span>
+      </span>
+    </div>
+  );
+}
 
 const STAT_ACCENT = {
   neutral: { cell: undefined, value: "text-foreground", hint: "text-muted-foreground" },

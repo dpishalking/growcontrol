@@ -35,6 +35,7 @@ import {
 import { getMetricTree } from "@/services/metricsService";
 import {
   createFunnel,
+  createFunnelDraft,
   getFunnelById,
   getFunnelsByProject,
   patchAudienceDetails,
@@ -175,6 +176,7 @@ type AppDataContextValue = {
   projectFunnels: (projectId: string) => Funnel[];
   getFunnel: (funnelId: string) => Funnel | null;
   createFunnelFocus: (input: CreateFunnelFocusInput) => Funnel;
+  createFunnelDraft: (projectId: string) => Funnel;
   updateFunnelPatch: (funnelId: string, patch: Partial<Funnel>) => Funnel | null;
   setFunnelStep: (funnelId: string, step: number) => Funnel | null;
   applyFunnelTypeAction: (
@@ -476,6 +478,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         const f = createFunnel(store, input);
         persist(store);
         syncProjectNameFromFunnels(store, input.projectId);
+        persist(store);
+        return f;
+      },
+      createFunnelDraft: (projectId) => {
+        const f = createFunnelDraft(store, projectId);
         persist(store);
         return f;
       },

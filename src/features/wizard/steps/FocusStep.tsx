@@ -5,60 +5,63 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAppData } from "@/context/AppDataContext";
 import { useAuth } from "@/hooks/useAuth";
 import { WizardLayout } from "@/features/wizard/WizardLayout";
-import type { CreateFunnelFocusInput, Funnel } from "@/types/funnel";
-import { FOCUS_QUIZ } from "@/features/quiz/definitions/focusQuiz";
+import type { Funnel } from "@/types/funnel";
+import {
+  getFocusQuizForType,
+  focusRequiredIdsForType,
+} from "@/features/quiz/definitions/focusQuizForType";
 import {
   QuizFlow,
   focusPatchFromValues,
   quizValuesFromFocus,
-  requiredQuestionIds,
 } from "@/features/quiz/QuizFlow";
 import {
   clearFocusDraft,
   getStorageScope,
   loadFocusDraft,
-  saveFocusDraft,
 } from "@/features/quiz/quizDraftStorage";
 
-export function FocusStep({ funnel }: { funnel: Funnel | null }) {
+export function FocusStep({ funnel }: { funnel: Funnel }) {
   const { projectId } = useParams<{ projectId: string }>();
   const nav = useNavigate();
   const { user: authUser } = useAuth();
   const scope = getStorageScope(authUser?.id);
   const {
-    createFunnelFocus,
     updateFunnelPatch,
     setFunnelStep,
     projectFunnels,
-    getFunnel,
   } = useAppData();
 
   const existing = funnel;
-  const otherFunnels = projectId ? projectFunnels(projectId).filter((f) => f.id !== existing?.id) : [];
+  const focusQuiz = useMemo(
+    () => getFocusQuizForType(existing.funnelTypeId),
+    [existing.funnelTypeId],
+  );
+  const otherFunnels = projectId ? projectFunnels(projectId).filter((f) => f.id !== existing.id) : [];
 
   const draft = useMemo(
-    () => (projectId && !existing ? loadFocusDraft(scope, projectId) : null),
-    [projectId, existing, scope],
+    () => (projectId && !existing.productName?.trim() ? loadFocusDraft(scope, projectId) : null),
+    [projectId, existing.productName, scope],
   );
 
   const [values, setValues] = useState<Record<string, string>>(() => {
     if (existing) return quizValuesFromFocus(existing);
     if (draft?.values) return { ...draft.values };
-    return Object.fromEntries(FOCUS_QUIZ.questions.map((q) => [q.id, ""]));
+    return Object.fromEntries(focusQuiz.questions.map((q) => [q.id, ""]));
   });
 
   const [questionIndex, setQuestionIndex] = useState(() => {
-    if (existing?.wizardQuizProgress?.focus?.questionIndex != null) {
+    if (existing.wizardQuizProgress?.focus?.questionIndex != null) {
       return existing.wizardQuizProgress.focus.questionIndex;
     }
     if (draft?.questionIndex != null) return draft.questionIndex;
     return 0;
   });
 
-  const [funnelId, setFunnelId] = useState<string | null>(existing?.id ?? null);
-  const activeFunnel = existing ?? (funnelId ? getFunnel(funnelId) : null);
-
-  const requiredIds = useMemo(() => requiredQuestionIds(FOCUS_QUIZ.questions), []);
+  const requiredIds = useMemo(
+    () => focusRequiredIdsForType(existing.funnelTypeId),
+    [existing.funnelTypeId],
+  );
 
   const persistProgress = useCallback(
     (nextValues: Record<string, string>, qIndex: number) => {
@@ -70,43 +73,17 @@ export function FocusStep({ funnel }: { funnel: Funnel | null }) {
         updatedAt: new Date().toISOString(),
       };
 
-      if (funnelId || existing) {
-        const id = funnelId ?? existing!.id;
-        updateFunnelPatch(id, {
-          ...patch,
-          status: "draft",
-          wizardQuizProgress: {
-            ...(existing?.wizardQuizProgress ?? {}),
-            focus: quizProgress,
-          },
-        });
-        clearFocusDraft(scope, projectId);
-        return;
-      }
-
-      saveFocusDraft(scope, projectId, {
-        values: nextValues,
-        questionIndex: qIndex,
-        updatedAt: quizProgress.updatedAt,
+      updateFunnelPatch(existing.id, {
+        ...patch,
+        status: "draft",
+        wizardQuizProgress: {
+          ...(existing.wizardQuizProgress ?? {}),
+          focus: quizProgress,
+        },
       });
-
-      if (patch.productName?.trim()) {
-        const created = createFunnelFocus({
-          projectId,
-          ...(patch as CreateFunnelFocusInput),
-        });
-        if (created) {
-          setFunnelId(created.id);
-          updateFunnelPatch(created.id, {
-            status: "draft",
-            wizardQuizProgress: { focus: quizProgress },
-          });
-          clearFocusDraft(scope, projectId);
-          nav(`/projects/${projectId}/funnels/${created.id}/wizard/focus`, { replace: true });
-        }
-      }
+      clearFocusDraft(scope, projectId);
     },
-    [projectId, funnelId, existing, scope, updateFunnelPatch, createFunnelFocus, nav],
+    [projectId, existing, scope, updateFunnelPatch],
   );
 
   const handleChange = (questionId: string, value: string) => {
@@ -142,14 +119,7 @@ export function FocusStep({ funnel }: { funnel: Funnel | null }) {
     }
 
     const patch = focusPatchFromValues(values);
-    let f: Funnel | null = activeFunnel;
-
-    if (f) {
-      f = updateFunnelPatch(f.id, { ...patch, status: "active" });
-    } else {
-      f = createFunnelFocus({ projectId, ...(patch as CreateFunnelFocusInput) });
-      if (f) f = updateFunnelPatch(f.id, { status: "active" });
-    }
+    const f = updateFunnelPatch(existing.id, { ...patch, status: "active" });
 
     if (!f) {
       toast.error("Не удалось сохранить");
@@ -157,16 +127,17 @@ export function FocusStep({ funnel }: { funnel: Funnel | null }) {
     }
 
     clearFocusDraft(scope, projectId);
-    setFunnelStep(f.id, 2);
-    toast.success("Фокус сохранён — переходим к типу воронки");
-    nav(`/projects/${projectId}/funnels/${f.id}/wizard/funnel-type`);
+    setFunnelStep(f.id, 3);
+    toast.success("Фокус сохранён — переходим к материалам");
+    nav(`/projects/${projectId}/funnels/${f.id}/wizard/materials`);
   };
 
   return (
     <WizardLayout
-      funnel={activeFunnel}
+      funnel={existing}
       projectId={projectId}
       activeStep="focus"
+      onBack={() => nav(`/projects/${projectId}/funnels/${funnel.id}/wizard/funnel-type`)}
       hideNav
     >
       <div className="space-y-4">
@@ -180,7 +151,7 @@ export function FocusStep({ funnel }: { funnel: Funnel | null }) {
         ) : null}
 
         <QuizFlow
-          config={FOCUS_QUIZ}
+          config={focusQuiz}
           values={values}
           onChange={handleChange}
           onComplete={handleComplete}

@@ -67,6 +67,13 @@ const STATUS_RANK: Record<string, number> = {
   green: 4,
 };
 
+function materialUrlLines(url: string): string[] {
+  return String(url ?? "")
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 function buildMaterialsBlock(
   materials: {
     type: string;
@@ -83,7 +90,8 @@ function buildMaterialsBlock(
   const body = slice
     .map((m, i) => {
       const text = (m.extractedText || m.content || "").trim().slice(0, MATERIAL_TEXT_MAX);
-      const urlLine = m.url ? ` (${m.url})` : "";
+      const urls = materialUrlLines(m.url);
+      const urlLine = urls.length === 0 ? "" : ` (${urls.join(" · ")})`;
       return `${i + 1}. [${m.stage}] ${m.type}: ${m.title}${urlLine}${text ? ` — ${text}` : ""}`;
     })
     .join("\n");

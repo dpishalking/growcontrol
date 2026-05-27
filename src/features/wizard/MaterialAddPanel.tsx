@@ -31,12 +31,14 @@ import type { ChecklistItem, StageGroup } from "@/features/wizard/MaterialCheckl
 import { MaterialStepPicker } from "@/features/wizard/MaterialStepPicker";
 import { formatFileSize } from "@/utils/fileAttachment";
 import { cn } from "@/lib/utils";
+import { isValidHttpUrl } from "@/utils/materialUrls";
 
 export type MaterialDraft = {
   type: MaterialType;
   funnelStage: string;
   title: string;
-  url: string;
+  /** По одному URL на клип-ленд или посадочную в цепочке — сохраняются в материал переводами строк */
+  urls: string[];
   attachment: MaterialAttachment | null;
 };
 
@@ -58,16 +60,6 @@ type Props = {
   onUseCustomMaterial: () => void;
 };
 
-function isValidUrl(value: string): boolean {
-  if (!value.trim()) return false;
-  try {
-    const u = new URL(value.trim());
-    return u.protocol === "http:" || u.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
 export function MaterialAddPanel({
   draft,
   onDraftChange,
@@ -88,7 +80,8 @@ export function MaterialAddPanel({
 
   const stageLabel = stages.find((s) => s.id === draft.funnelStage)?.label ?? draft.funnelStage;
   const typeMeta = MATERIAL_TYPES.find((t) => t.id === draft.type);
-  const hasLink = isValidUrl(draft.url);
+  const normalizedDraftUrls = draft.urls ?? [];
+  const hasLink = normalizedDraftUrls.some((line) => isValidHttpUrl(line));
   const hasFile = !!draft.attachment;
   const hasContent =
     sourceMode === "link" ? hasLink : sourceMode === "file" ? hasFile : hasLink || hasFile;
@@ -165,7 +158,13 @@ export function MaterialAddPanel({
           <div className="space-y-1">
             <div className="flex justify-between text-[10px] text-muted-foreground">
               <span>Готовность</span>
-              <span>{canSubmit ? "можно сохранить" : step1Done ? "добавьте ссылку или файл" : "укажите название"}</span>
+              <span>
+                {canSubmit
+                  ? "можно сохранить"
+                  : step1Done
+                    ? "добавьте ссылки или файл"
+                    : "укажите название"}
+              </span>
             </div>
             <Progress value={microProgress} className="h-1" />
           </div>
@@ -297,7 +296,12 @@ export function MaterialAddPanel({
             <div className="grid grid-cols-3 gap-2">
               {(
                 [
-                  { id: "link" as const, icon: Link2, label: "Ссылка", hint: "URL страницы" },
+                  {
+                    id: "link" as const,
+                    icon: Link2,
+                    label: "Ссылка",
+                    hint: "Один или несколько URL подряд",
+                  },
                   { id: "file" as const, icon: Paperclip, label: "Файл", hint: "Скрин, PDF, txt" },
                   { id: "both" as const, icon: Upload, label: "Оба", hint: "Максимум для аудита" },
                 ] as const
@@ -330,19 +334,72 @@ export function MaterialAddPanel({
             </div>
 
             {(sourceMode === "link" || sourceMode === "both") && (
-              <div className="space-y-1.5 fade-in pt-1">
-                <div className="relative">
-                  <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    value={draft.url}
-                    onChange={(e) => onDraftChange({ url: e.target.value })}
-                    placeholder="https://…"
-                    className="h-11 pl-9 pr-10 text-sm"
-                  />
-                  {hasLink ? (
-                    <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-success animate-in fade-in zoom-in duration-200" />
-                  ) : null}
+              <div className="space-y-2 fade-in pt-1">
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Если в цепочку входит несколько страниц (клип-лендинг), укажите ссылки по порядку, с первой до
+                  последней.
+                </p>
+                <div className="space-y-2">
+                  {normalizedDraftUrls.map((line, idx) => {
+                    const rowValid = isValidHttpUrl(line);
+                    return (
+                      <div key={idx} className="flex gap-2 sm:items-center">
+                        <div className="relative min-w-0 flex-1">
+                          <Link2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                          <Input
+                            value={line}
+                            onChange={(e) =>
+                              onDraftChange({
+                                urls: normalizedDraftUrls.map((u, i) =>
+                                  i === idx ? e.target.value : u,
+                                ),
+                              })
+                            }
+                            placeholder={`https://… (страница ${idx + 1})`}
+                            className="h-11 pl-9 pr-9 text-sm"
+                            inputMode="url"
+                            autoComplete="url"
+                            spellCheck={false}
+                          />
+                          {rowValid ? (
+                            <Check
+                              className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-success"
+                              aria-hidden
+                            />
+                          ) : null}
+                        </div>
+                        {normalizedDraftUrls.length > 1 ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-11 w-11 shrink-0 text-muted-foreground hover:text-foreground"
+                            onClick={() =>
+                              onDraftChange({
+                                urls: normalizedDraftUrls.filter((_, i) => i !== idx),
+                              })
+                            }
+                            aria-label={`Убрать ссылку ${idx + 1}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        ) : (
+                          <div className="h-11 w-11 shrink-0" aria-hidden />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 w-full border-dashed text-xs sm:w-auto"
+                  onClick={() => onDraftChange({ urls: [...normalizedDraftUrls, ""] })}
+                >
+                  <Plus className="mr-1 h-3.5 w-3.5" />
+                  Добавить ещё одну страницу
+                </Button>
               </div>
             )}
 

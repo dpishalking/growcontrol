@@ -1,6 +1,7 @@
 import { Navigate, useParams } from "react-router-dom";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { getFunnelTypeTemplate } from "@/data/funnelTypes/catalog";
+import { isFocusComplete } from "@/features/quiz/definitions/focusQuizForType";
 import { TelegramConnectButton } from "@/features/dashboard/TelegramConnectButton";
 import { useAppData } from "@/context/AppDataContext";
 import { useAuth } from "@/hooks/useAuth";
@@ -13,10 +14,11 @@ import { MetricsStep } from "@/features/wizard/steps/MetricsStep";
 import { HypothesesStep } from "@/features/wizard/steps/HypothesesStep";
 import { PlanStep } from "@/features/wizard/steps/PlanStep";
 import type { WizardStepId } from "@/features/wizard/wizardSteps";
+import { buildFunnelEntityPath } from "@/lib/funnelEntityPath";
 
 const STEP_IDS: WizardStepId[] = [
-  "focus",
   "funnel-type",
+  "focus",
   "materials",
   "metrics",
   "audit",
@@ -28,7 +30,7 @@ function isStepId(value: string | undefined): value is WizardStepId {
   return !!value && (STEP_IDS as string[]).includes(value);
 }
 
-const STEPS_AFTER_TYPE: WizardStepId[] = STEP_IDS.slice(2);
+const STEPS_AFTER_FOCUS: WizardStepId[] = STEP_IDS.slice(2);
 
 export default function FunnelWizardPage() {
   const { projectId, funnelId, step } = useParams<{
@@ -36,7 +38,7 @@ export default function FunnelWizardPage() {
     funnelId?: string;
     step?: string;
   }>();
-  const { getFunnel, remoteSyncing } = useAppData();
+  const { getFunnel, projectFunnels, remoteSyncing } = useAppData();
   const { guest } = useAuth();
   const guard = useProjectFunnelGuard(projectId, funnelId, { requireFunnel: false });
   const guardView = renderRouteGuard(guard);
@@ -62,23 +64,29 @@ export default function FunnelWizardPage() {
     return <Navigate to={`/projects/${projectId}/funnels/${funnel.id}/wizard/plan`} replace />;
   }
 
-  const stepId: WizardStepId = isStepId(step) ? step : "focus";
+  const stepId: WizardStepId = isStepId(step) ? step : "funnel-type";
 
-  if (stepId !== "focus" && !funnel) {
-    return <Navigate to={`/projects/${projectId}/funnels/new/wizard/focus`} replace />;
+  if (stepId !== "funnel-type" && !funnel) {
+    return <Navigate to={`/projects/${projectId}/funnels/new/wizard/funnel-type`} replace />;
   }
 
-  if (
-    funnel &&
-    STEPS_AFTER_TYPE.includes(stepId) &&
-    !funnel.funnelTypeId
-  ) {
+  if (funnel && stepId !== "funnel-type" && !funnel.funnelTypeId) {
     return <Navigate to={`/projects/${projectId}/funnels/${funnel.id}/wizard/funnel-type`} replace />;
+  }
+
+  if (funnel && STEPS_AFTER_FOCUS.includes(stepId) && !isFocusComplete(funnel)) {
+    return <Navigate to={`/projects/${projectId}/funnels/${funnel.id}/wizard/focus`} replace />;
   }
 
   const typeLabel = funnel?.funnelTypeId
     ? getFunnelTypeTemplate(funnel.funnelTypeId).name
     : null;
+  const pathSegments = buildFunnelEntityPath(
+    project,
+    funnel,
+    projectId!,
+    projectFunnels(project.id),
+  );
   const wizardTitle = funnel
     ? [funnel.productName || "без названия", typeLabel].filter(Boolean).join(" · ")
     : "Новая воронка";
@@ -87,22 +95,25 @@ export default function FunnelWizardPage() {
     <>
       <PageHeader
         title={wizardTitle}
+        pathSegments={pathSegments}
         subtitle={
-          stepId === "focus"
-            ? "Шаги мастера → одна воронка → конкретные гипотезы по метрикам"
-            : undefined
+          stepId === "funnel-type"
+            ? "Сначала тип — потом вопросы только по вашему формату"
+            : stepId === "focus"
+              ? "Квиз под выбранный тип воронки"
+              : undefined
         }
         backTo="/dashboard"
         backLabel="На главную"
-        compact={stepId !== "focus"}
+        compact={stepId !== "funnel-type"}
         action={!guest ? <TelegramConnectButton appProjectId={projectId} /> : undefined}
       />
 
-      {stepId === "focus" ? (
-        <FocusStep funnel={funnel} />
+      {stepId === "funnel-type" ? (
+        <FunnelTypeStep funnel={funnel} />
       ) : funnel ? (
         <>
-          {stepId === "funnel-type" && <FunnelTypeStep funnel={funnel} />}
+          {stepId === "focus" && <FocusStep funnel={funnel} />}
           {stepId === "materials" && <MaterialsStep funnel={funnel} />}
           {stepId === "metrics" && <MetricsStep funnel={funnel} />}
           {stepId === "audit" && <AuditStep funnel={funnel} />}

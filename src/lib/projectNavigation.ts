@@ -13,7 +13,7 @@ export function resolveProjectOpenTarget(
   scope: string,
 ): ProjectOpenTarget {
   if (funnels.length === 0) {
-    return { kind: "navigate", path: `/projects/${projectId}/funnels/new/wizard/focus` };
+    return { kind: "navigate", path: `/projects/${projectId}/funnels/new/wizard/funnel-type` };
   }
 
   if (funnels.length === 1) {
