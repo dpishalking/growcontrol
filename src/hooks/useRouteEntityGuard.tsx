@@ -23,12 +23,13 @@ export function useProjectFunnelGuard(
   options?: { requireFunnel?: boolean },
 ): ProjectFunnelGuard {
   const { getProject, getFunnel, remoteSyncing } = useAppData();
-  const requireFunnel = options?.requireFunnel ?? Boolean(funnelId);
+  const resolvedFunnelId = funnelId && funnelId !== "new" ? funnelId : undefined;
+  const requireFunnel = options?.requireFunnel ?? Boolean(resolvedFunnelId);
 
   if (!projectId) return { status: "redirect", to: "/dashboard" };
 
   const project = getProject(projectId);
-  const funnel = funnelId ? getFunnel(funnelId) : null;
+  const funnel = resolvedFunnelId ? getFunnel(resolvedFunnelId) : null;
   const missingProject = !project;
   const missingFunnel = requireFunnel && !funnel;
 

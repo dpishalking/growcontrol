@@ -32,7 +32,9 @@ import { WIZARD_STEPS, wizardStepByIndex } from "@/features/wizard/wizardSteps";
 import { getStageLabelForFunnel } from "@/utils/funnelStages";
 import { cn } from "@/lib/utils";
 import type { Experiment, ExperimentDecision } from "@/types/experiment";
+import type { Funnel } from "@/types/funnel";
 import type { Hypothesis } from "@/types/hypothesis";
+import type { Project } from "@/types/project";
 
 const EXPERIMENT_DECISION_RU: Partial<Record<ExperimentDecision, string>> = {
   scale: "Масштаб",
@@ -55,17 +57,34 @@ const BUCKET_COLORS: Record<string, { ring: string; bg: string; text: string }> 
 
 export default function FunnelOverviewPage() {
   const { projectId, funnelId } = useParams<{ projectId: string; funnelId: string }>();
+  const guard = useProjectFunnelGuard(projectId, funnelId);
+  const guardView = renderRouteGuard(guard);
+  if (guardView) return guardView;
+
+  return (
+    <FunnelOverviewContent
+      projectId={projectId!}
+      project={guard.project}
+      funnel={guard.funnel}
+    />
+  );
+}
+
+function FunnelOverviewContent({
+  projectId,
+  project,
+  funnel,
+}: {
+  projectId: string;
+  project: Project;
+  funnel: Funnel;
+}) {
   const {
     funnelMaterials,
     funnelMetricsList,
     funnelHypotheses,
     funnelExperiments,
   } = useAppData();
-  const guard = useProjectFunnelGuard(projectId, funnelId);
-  const guardView = renderRouteGuard(guard);
-  if (guardView) return guardView;
-
-  const { project, funnel } = guard;
 
   const materials   = funnelMaterials(funnel.id);
   const metrics     = funnelMetricsList(funnel.id);

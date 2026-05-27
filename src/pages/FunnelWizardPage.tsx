@@ -13,7 +13,6 @@ import { MetricsStep } from "@/features/wizard/steps/MetricsStep";
 import { HypothesesStep } from "@/features/wizard/steps/HypothesesStep";
 import { PlanStep } from "@/features/wizard/steps/PlanStep";
 import type { WizardStepId } from "@/features/wizard/wizardSteps";
-import { projectDashboardPath } from "@/lib/projectNavigation";
 
 const STEP_IDS: WizardStepId[] = [
   "focus",
@@ -44,9 +43,10 @@ export default function FunnelWizardPage() {
   if (guardView) return guardView;
 
   const { project } = guard;
-  const funnel = funnelId ? getFunnel(funnelId) : null;
+  const resolvedFunnelId = funnelId && funnelId !== "new" ? funnelId : undefined;
+  const funnel = resolvedFunnelId ? getFunnel(resolvedFunnelId) : null;
 
-  if (funnelId && !funnel && remoteSyncing) {
+  if (resolvedFunnelId && !funnel && remoteSyncing) {
     return <RouteLoading />;
   }
 
@@ -92,8 +92,8 @@ export default function FunnelWizardPage() {
             ? "Шаги мастера → одна воронка → конкретные гипотезы по метрикам"
             : undefined
         }
-        backTo={projectDashboardPath(projectId)}
-        backLabel="К проектам"
+        backTo="/dashboard"
+        backLabel="На главную"
         compact={stepId !== "focus"}
         action={!guest ? <TelegramConnectButton appProjectId={projectId} /> : undefined}
       />

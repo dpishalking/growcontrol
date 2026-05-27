@@ -64,11 +64,19 @@ export default function App() {
                   />
                   <Route
                     path="/projects/:projectId/funnels/new/wizard/:step"
-                    element={<FunnelWizardPage />}
+                    element={
+                      <ErrorBoundary fallbackTitle="Не удалось открыть мастер">
+                        <FunnelWizardPage />
+                      </ErrorBoundary>
+                    }
                   />
                   <Route
                     path="/projects/:projectId/funnels/:funnelId/wizard/:step"
-                    element={<FunnelWizardPage />}
+                    element={
+                      <ErrorBoundary fallbackTitle="Не удалось открыть мастер">
+                        <FunnelWizardPage />
+                      </ErrorBoundary>
+                    }
                   />
                   <Route
                     path="/projects/:projectId/funnels/:funnelId"

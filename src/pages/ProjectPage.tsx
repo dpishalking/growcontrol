@@ -1,7 +1,7 @@
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { useAppData } from "@/context/AppDataContext";
 import { useAuth } from "@/hooks/useAuth";
-import { renderRouteGuard, useProjectFunnelGuard } from "@/hooks/useRouteEntityGuard";
+import { renderRouteGuard, RouteLoading, useProjectFunnelGuard } from "@/hooks/useRouteEntityGuard";
 import { ProjectFunnelsPanel } from "@/features/dashboard/ProjectFunnelsPanel";
 import { getStorageScope } from "@/features/quiz/quizDraftStorage";
 import { resolveProjectOpenTarget } from "@/lib/projectNavigation";
@@ -9,12 +9,13 @@ import { resolveProjectOpenTarget } from "@/lib/projectNavigation";
 export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const nav = useNavigate();
-  const { projectFunnels } = useAppData();
+  const { projectFunnels, remoteSyncing } = useAppData();
   const { user: authUser } = useAuth();
   const scope = getStorageScope(authUser?.id);
   const guard = useProjectFunnelGuard(projectId, undefined, { requireFunnel: false });
   const guardView = renderRouteGuard(guard);
   if (guardView) return guardView;
+  if (remoteSyncing) return <RouteLoading />;
 
   const { project } = guard;
 
