@@ -1,5 +1,6 @@
 import { getFunnelTypeTemplate } from "@/data/funnelTypes/catalog";
 import type { FunnelTypeId } from "@/types/funnelType";
+import { splitLandingUrls } from "@/utils/landingUrls";
 import type { QuizQuestion, QuizStepConfig } from "../types";
 import { FOCUS_QUIZ } from "./focusQuiz";
 
@@ -14,6 +15,7 @@ const PATCHES: Partial<Record<FunnelTypeId, Partial<Record<string, QuestionPatch
       subtitle: "Куда ведёт реклама — reg page, не страница продажи.",
       placeholder: "https://site.ru/webinar-reg",
       examples: ["https://site.ru/reg", "https://getcourse.ru/pl/webinar"],
+      urlFields: 1,
     },
     funnelGoal: {
       title: "Главная цель на этом этапе?",
@@ -30,6 +32,7 @@ const PATCHES: Partial<Record<FunnelTypeId, Partial<Record<string, QuestionPatch
       title: "Ссылка на страницу записи / триала",
       subtitle: "Страница, куда попадает человек из рекламы или контента.",
       placeholder: "https://school.ru/start",
+      urlFields: 1,
     },
     funnelGoal: {
       placeholder: "Запись на бесплатный урок или триал",
@@ -45,6 +48,7 @@ const PATCHES: Partial<Record<FunnelTypeId, Partial<Record<string, QuestionPatch
       title: "Ссылка на бота или посадочную",
       subtitle: "t.me/… или страница с кнопкой «Открыть в Telegram».",
       placeholder: "https://t.me/your_bot?start=utm",
+      urlFields: 1,
     },
     funnelGoal: {
       placeholder: "Подписка и прохождение первого шага в боте",
@@ -56,6 +60,7 @@ const PATCHES: Partial<Record<FunnelTypeId, Partial<Record<string, QuestionPatch
       title: "Ссылка на квиз / опрос",
       subtitle: "Страница с первым вопросом или лид-формой перед результатом.",
       placeholder: "https://site.ru/quiz",
+      urlFields: 1,
     },
     funnelGoal: {
       placeholder: "Прохождение квиза до результата",
@@ -67,6 +72,7 @@ const PATCHES: Partial<Record<FunnelTypeId, Partial<Record<string, QuestionPatch
       title: "Ссылка на запись или сайт точки",
       subtitle: "Онлайн-запись, карта, форма бронирования.",
       placeholder: "https://clinic.ru/book",
+      urlFields: 1,
     },
     funnelGoal: {
       placeholder: "Запись на визит или консультацию",
@@ -79,8 +85,10 @@ const PATCHES: Partial<Record<FunnelTypeId, Partial<Record<string, QuestionPatch
       placeholder: "Оформленный заказ",
     },
     landingUrl: {
-      title: "Ссылка на карточку или каталог",
-      subtitle: "Страница товара, категория или главная магазина.",
+      title: "Ссылки на страницы клип-ленда или каталог",
+      subtitle: "До 4 страниц — карточка, категория, главная магазина. По одной ссылке на поле.",
+      urlFields: 4,
+      urlFieldLabels: ["Страница 1", "Страница 2", "Страница 3", "Страница 4"],
     },
   },
   subscription: {
@@ -140,8 +148,11 @@ export function isFocusComplete(
     productName: funnel.productName,
     productDescription: funnel.productDescription,
     trafficSource: funnel.trafficSource,
-    landingUrl: funnel.landingUrl,
+    landingUrl: splitLandingUrls(funnel.landingUrl)[0] ?? "",
     funnelGoal: funnel.funnelGoal,
   };
-  return ids.every((id) => (values[id] ?? "").trim().length > 0);
+  return ids.every((id) => {
+    if (id === "landingUrl") return splitLandingUrls(funnel.landingUrl).length > 0;
+    return (values[id] ?? "").trim().length > 0;
+  });
 }

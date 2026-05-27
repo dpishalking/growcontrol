@@ -12,6 +12,9 @@ export type QuizQuestion = {
   /** Короткая подсказка под полем. */
   hint?: string;
   examples?: string[];
+  /** Несколько URL на одном шаге (клип-ленд и т.п.). */
+  urlFields?: number;
+  urlFieldLabels?: string[];
 };
 
 export type WizardQuizStepId = WizardStepId | "details";

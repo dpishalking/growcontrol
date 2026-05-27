@@ -20,6 +20,7 @@ import {
   getStorageScope,
   loadFocusDraft,
 } from "@/features/quiz/quizDraftStorage";
+import { landingUrlToQuizValues } from "@/utils/landingUrls";
 
 export function FocusStep({ funnel }: { funnel: Funnel }) {
   const { projectId } = useParams<{ projectId: string }>();
@@ -46,8 +47,11 @@ export function FocusStep({ funnel }: { funnel: Funnel }) {
 
   const [values, setValues] = useState<Record<string, string>>(() => {
     if (existing) return quizValuesFromFocus(existing);
-    if (draft?.values) return { ...draft.values };
-    return Object.fromEntries(focusQuiz.questions.map((q) => [q.id, ""]));
+    if (draft?.values) return { ...landingUrlToQuizValues(""), ...draft.values };
+    return {
+      ...Object.fromEntries(focusQuiz.questions.map((q) => [q.id, ""])),
+      ...landingUrlToQuizValues(""),
+    };
   });
 
   const [questionIndex, setQuestionIndex] = useState(() => {

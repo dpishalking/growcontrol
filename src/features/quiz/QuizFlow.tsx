@@ -6,6 +6,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import {
+  landingUrlFieldKeys,
+  landingUrlToQuizValues,
+  quizValuesToLandingUrl,
+} from "@/utils/landingUrls";
 import type { QuizQuestion, QuizStepConfig } from "./types";
 import { fetchQuizHint } from "./quizHintService";
 
@@ -44,7 +49,13 @@ export function QuizFlow({
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const q = questions[index];
+  const urlFieldCount = q.urlFields ?? 1;
+  const urlKeys =
+    q.id === "landingUrl" && urlFieldCount > 1
+      ? landingUrlFieldKeys(urlFieldCount)
+      : [q.id];
   const value = values[q.id] ?? "";
+  const primaryValue = values[urlKeys[0]] ?? "";
   const progress = ((index + 1) / questions.length) * 100;
 
   const setIndexSafe = useCallback(
@@ -74,6 +85,11 @@ export function QuizFlow({
     triggerAutosave();
   };
 
+  const handleFieldChange = (fieldId: string, v: string) => {
+    onChange(fieldId, v);
+    triggerAutosave();
+  };
+
   useEffect(() => {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -82,7 +98,7 @@ export function QuizFlow({
   }, []);
 
   const handleNext = () => {
-    if (q.required && !value.trim()) {
+    if (q.required && !primaryValue.trim()) {
       toast.error("Это поле обязательно — или вернитесь позже, черновик уже сохранён");
       return;
     }
@@ -178,6 +194,28 @@ export function QuizFlow({
               className="text-base resize-none min-h-[120px]"
               autoFocus
             />
+          ) : urlFieldCount > 1 ? (
+            <div className="space-y-3">
+              {urlKeys.map((fieldId, i) => (
+                <div key={fieldId} className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    {q.urlFieldLabels?.[i] ?? `Страница ${i + 1}`}
+                    {i === 0 && q.required ? <span className="text-danger ml-0.5">*</span> : null}
+                  </label>
+                  <Input
+                    value={values[fieldId] ?? ""}
+                    onChange={(e) => handleFieldChange(fieldId, e.target.value)}
+                    placeholder={
+                      i === 0
+                        ? q.placeholder
+                        : `${q.placeholder?.replace(/-\d+$/, "") ?? "https://site.ru/page"}-${i + 1}`
+                    }
+                    className="text-base h-12"
+                    autoFocus={i === 0}
+                  />
+                </div>
+              ))}
+            </div>
           ) : (
             <Input
               value={value}
@@ -279,7 +317,7 @@ export function quizValuesFromFocus(funnel: {
     productDescription: funnel.productDescription,
     averagePrice: funnel.averagePrice,
     trafficSource: funnel.trafficSource,
-    landingUrl: funnel.landingUrl,
+    ...landingUrlToQuizValues(funnel.landingUrl),
     targetAudience: funnel.targetAudience,
     funnelGoal: funnel.funnelGoal,
     currentProblem: funnel.currentProblem,
@@ -301,7 +339,7 @@ export function focusPatchFromValues(values: Record<string, string>): Partial<{
     productDescription: values.productDescription?.trim() ?? "",
     averagePrice: values.averagePrice?.trim() ?? "",
     trafficSource: values.trafficSource?.trim() ?? "",
-    landingUrl: values.landingUrl?.trim() ?? "",
+    landingUrl: quizValuesToLandingUrl(values),
     targetAudience: values.targetAudience?.trim() ?? "",
     funnelGoal: values.funnelGoal?.trim() ?? "",
     currentProblem: values.currentProblem?.trim() ?? "",

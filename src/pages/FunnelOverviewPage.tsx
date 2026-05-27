@@ -35,6 +35,7 @@ import { buildDiagnostics } from "@/utils/funnelDiagnostics";
 import { sortByPriority, BUCKET_LABELS } from "@/utils/icePriority";
 import { WIZARD_STEPS, wizardStepByIndex } from "@/features/wizard/wizardSteps";
 import { getStagesForFunnel, getStageLabelForFunnel } from "@/utils/funnelStages";
+import { formatLandingUrlsForDisplay } from "@/utils/landingUrls";
 import { cn } from "@/lib/utils";
 import type { Experiment, ExperimentDecision } from "@/types/experiment";
 import type { Funnel } from "@/types/funnel";
@@ -178,7 +179,9 @@ function FunnelOverviewContent({
               <div className="space-y-3">
                 <EntityPathTitle segments={pathSegments} />
                 <p className="max-w-2xl text-sm text-muted-foreground">
-                  {[funnel.trafficSource, funnel.landingUrl].filter(Boolean).join(" → ")}
+                  {[funnel.trafficSource, formatLandingUrlsForDisplay(funnel.landingUrl)]
+                    .filter(Boolean)
+                    .join(" → ")}
                   {funnel.funnelGoal ? ` · Цель: ${funnel.funnelGoal}` : ""}
                 </p>
               </div>

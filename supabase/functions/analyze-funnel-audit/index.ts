@@ -307,10 +307,23 @@ serve(async (req) => {
       }[],
     );
 
-    const landingLine =
-      landingUrl && typeof landingUrl === "string" && landingUrl.trim()
-        ? `URL посадочной (не скрапим): ${landingUrl.startsWith("http") ? landingUrl : `https://${landingUrl}`}`
-        : "";
+    const landingLine = (() => {
+      if (!landingUrl || typeof landingUrl !== "string" || !landingUrl.trim()) return "";
+      const urls = landingUrl
+        .split(/\n+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (urls.length === 0) return "";
+      if (urls.length === 1) {
+        const u = urls[0];
+        return `URL посадочной (не скрапим): ${u.startsWith("http") ? u : `https://${u}`}`;
+      }
+      const lines = urls.map((u, i) => {
+        const href = u.startsWith("http") ? u : `https://${u}`;
+        return `Страница ${i + 1}: ${href}`;
+      });
+      return `URL посадочных (не скрапим):\n${lines.join("\n")}`;
+    })();
 
     const userText = [
       "Быстрый скрининг воронки по метрикам. Не делай site-audit.",

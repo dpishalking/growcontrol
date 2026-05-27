@@ -47,11 +47,13 @@ export const FOCUS_QUIZ: QuizStepConfig = {
     {
       id: "landingUrl",
       section: "Канал",
-      title: "Ссылка на посадочную страницу",
-      subtitle: "Куда попадает человек после клика по рекламе или поста.",
-      placeholder: "https://site.ru/landing",
+      title: "Ссылки на страницы посадочной",
+      subtitle: "Клип-ленд — до 4 страниц. Укажите URL каждой, куда попадает трафик.",
+      placeholder: "https://site.ru/page-1",
       required: true,
-      hint: "Если несколько страниц — укажите ту, куда ведёт основной поток.",
+      urlFields: 4,
+      urlFieldLabels: ["Страница 1", "Страница 2", "Страница 3", "Страница 4"],
+      hint: "Если одна страница — заполните только первое поле. Остальные можно оставить пустыми.",
     },
     {
       id: "targetAudience",
